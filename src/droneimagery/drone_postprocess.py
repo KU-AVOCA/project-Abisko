@@ -5,7 +5,7 @@ from rasterio.windows import Window
 import numpy as np
 import matplotlib.pyplot as plt
 import os
-# from tqdm import tqdm 
+from tqdm import tqdm 
 import cmocean as cmo
 
 #%%
@@ -49,7 +49,7 @@ def process_altum_orthomosaic(input_path, output_dir=None):
             'count': band_count - 1,  # Exclude thermal band
             'dtype': 'float32',
             'nodata': np.nan,
-            'BIGTIFF': 'YES'  # Enable BigTIFF format
+            'BIGTIFF': 'YES'  
         })
         
         thermal_profile = profile.copy()
@@ -57,7 +57,7 @@ def process_altum_orthomosaic(input_path, output_dir=None):
             'count': 1,
             'dtype': 'float32',
             'nodata': np.nan,
-            'BIGTIFF': 'YES'  # Enable BigTIFF format
+            'BIGTIFF': 'YES'  
         })
         
         # Define chunk size for efficient processing
@@ -68,7 +68,7 @@ def process_altum_orthomosaic(input_path, output_dir=None):
              rasterio.open(thermal_output_path, 'w', **thermal_profile) as thermal_dst:
             
             # Process multispectral bands
-            for i in range(1, band_count):
+            for i in tqdm(range(1, band_count), desc="Processing multispectral bands"):
                 print(f"Processing multispectral band {i}...")
                 
                 # Process image in chunks
@@ -270,10 +270,10 @@ if __name__ == "__main__":
     
     # Process the image
     ms_output, thermal_output = process_altum_orthomosaic(input_image, output_directory)
-    ms_output = "/mnt/i/SCIENCE-IGN-ALL/AVOCA_Group/2_Shared_folders/4_Student projects/1_Monika_Kathrine/2_Results/1_DroneImagery/postprocessed/20230608_orthomosaic32022_processed.tif"
-    thermal_output = "/mnt/i/SCIENCE-IGN-ALL/AVOCA_Group/2_Shared_folders/4_Student projects/1_Monika_Kathrine/2_Results/1_DroneImagery/postprocessed/20230608_orthomosaic32022_thermal_celsius.tif"
+    # ms_output = "/mnt/i/SCIENCE-IGN-ALL/AVOCA_Group/2_Shared_folders/4_Student projects/1_Monika_Kathrine/2_Results/1_DroneImagery/postprocessed/20230608_orthomosaic32022_processed.tif"
+    # thermal_output = "/mnt/i/SCIENCE-IGN-ALL/AVOCA_Group/2_Shared_folders/4_Student projects/1_Monika_Kathrine/2_Results/1_DroneImagery/postprocessed/20230608_orthomosaic32022_thermal_celsius.tif"
     
     # Visualize the results
-    visualize_results(ms_output, thermal_output, downsample_factor=1)
+    visualize_results(ms_output, thermal_output, downsample_factor=0.1)
 # %%
 
