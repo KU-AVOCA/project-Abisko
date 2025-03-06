@@ -1,4 +1,3 @@
-
 '''
 Green Ratio Detector for Vegetation Analysis
 This script processes a collection of images to quantify vegetation coverage by calculating 
@@ -87,7 +86,35 @@ def quantify_vegetation(img):
         print(f"An error occurred: {e}")
         return None, None
 
+def quantify_vegetation_adaptive(img):
+    try:
+        # Calculate GCC as before
+        b, g, r = cv2.split(img)
+        b = b.astype(float)
+        g = g.astype(float)
+        r = r.astype(float)
+        
+        greenness = g / (r + g + b + 1e-10)
+        
+        # Convert to 8-bit for adaptive thresholding
+        greenness_8bit = (greenness * 255).astype(np.uint8)
+        
+        # Apply adaptive thresholding
+        green_mask = cv2.adaptiveThreshold(
+            greenness_8bit, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
+            cv2.THRESH_BINARY, 11, 2
+        )
+        
+        # Calculate ratio
+        green_pixels = np.sum(green_mask > 0)
+        total_pixels = img.shape[0] * img.shape[1]
+        green_ratio = green_pixels / total_pixels if total_pixels > 0 else 0
+        
+        return green_ratio, green_mask
 
+    except Exception as e:
+        print(f"An error occurred: {e}")
+        return None, None
 
 #%%
 data = []
@@ -96,7 +123,8 @@ for i in tqdm.tqdm(imfiles, desc="Processing images"):
     print("processing: ", i)
 
     # Quantify vegetation within the whole image
-    ratio, green_mask = quantify_vegetation(img)
+    # ratio, green_mask = quantify_vegetation(img)
+    ratio, green_mask = quantify_vegetation_adaptive(img)
 
     if ratio is not None:
         print(f"The green pixel ratio is: {ratio:.4f}")
@@ -124,7 +152,7 @@ for i in tqdm.tqdm(imfiles, desc="Processing images"):
         axes[1].axis('off')  # Hide the axes
 
         plt.tight_layout()  # Adjust layout to prevent overlapping titles
-        # plt.show()
+        plt.show()
 
         # Save the figure
         # Extract base filename and extension

@@ -1,4 +1,3 @@
-
 '''
 Green Ratio Detector for Vegetation Analysis
 This script processes a collection of images to quantify vegetation coverage by calculating 
@@ -45,49 +44,44 @@ imfiles.extend(glob.glob(imfolder + '**/*.JPG', recursive=True))
 imfiles.extend(glob.glob(imfolder + '**/*.jpg', recursive=True))
 imfiles.extend(glob.glob(imfolder + '**/*.JPEG', recursive=True))
 imfiles.extend(glob.glob(imfolder + '**/*.jpeg', recursive=True))
-imoutfolder = '/mnt/i/SCIENCE-IGN-ALL/AVOCA_Group/2_Shared_folders/1_Data/1_Abisko/9_RGB_Close-up/1_CHMB/0_ALL_green_ratio/'
+imoutfolder = '/mnt/i/SCIENCE-IGN-ALL/AVOCA_Group/2_Shared_folders/1_Data/1_Abisko/9_RGB_Close-up/1_CHMB/0_ALL_green_ratio_test/'
 if not os.path.exists(imoutfolder):
     os.makedirs(imoutfolder)
 #%%    
 def quantify_vegetation(img):
-    """
-    Quantifies the ratio of green to non-green pixels using Greenness index (GCC).
-
-    Args:
-        img: The input image (BGR format)
-
-    Returns:
-        tuple: Ratio of green pixels to total pixels, and the green mask.
-    """
     try:
-        # Split the image into its BGR channels
+        # Split the image into BGR channels
         b, g, r = cv2.split(img)
         
-        # Convert to float to avoid integer division
+        # Calculate GCC
         b = b.astype(float)
         g = g.astype(float)
         r = r.astype(float)
         
-        # Calculate the Greenness index G/(R+G+B)
-        # Note: Adding a small value to prevent division by zero
-        greenness = g / (r + g + b + 1e-10) #  
-
-        # Create a binary mask using a threshold (adjust as needed)
-        threshold = 0.36  # don't ask me why this value
-        green_mask = (greenness > threshold).astype(np.uint8) * 255
+        greenness = g / (r + g + b + 1e-10)
         
-        # Count green pixels and calculate ratio
+        # Convert to 8-bit for Otsu thresholding
+        greenness_8bit = (greenness * 255).astype(np.uint8)
+        
+        # Apply Otsu's automatic thresholding
+        threshold_value, green_mask = cv2.threshold(
+            greenness_8bit, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU
+        )
+        
+        # Convert threshold back to GCC scale for reference
+        gcc_threshold = threshold_value / 255.0
+        print(f"Automatically determined threshold: {gcc_threshold:.4f}")
+        
+        # Calculate ratio
         green_pixels = np.sum(green_mask > 0)
         total_pixels = img.shape[0] * img.shape[1]
         green_ratio = green_pixels / total_pixels if total_pixels > 0 else 0
         
-        return green_ratio, green_mask
+        return green_ratio, green_mask, gcc_threshold
 
     except Exception as e:
         print(f"An error occurred: {e}")
-        return None, None
-
-
+        return None, None, None
 
 #%%
 data = []
@@ -96,11 +90,11 @@ for i in tqdm.tqdm(imfiles, desc="Processing images"):
     print("processing: ", i)
 
     # Quantify vegetation within the whole image
-    ratio, green_mask = quantify_vegetation(img)
+    ratio, green_mask, gcc_threshold = quantify_vegetation(img)
 
     if ratio is not None:
         print(f"The green pixel ratio is: {ratio:.4f}")
-        data.append({'filename': i, 'green_ratio': ratio})
+        data.append({'filename': i, 'green_ratio': ratio, 'gcc_threshold': gcc_threshold})
 
         # Apply the green mask to the image
         masked_img = cv2.bitwise_and(img, img, mask=green_mask)
@@ -124,7 +118,7 @@ for i in tqdm.tqdm(imfiles, desc="Processing images"):
         axes[1].axis('off')  # Hide the axes
 
         plt.tight_layout()  # Adjust layout to prevent overlapping titles
-        # plt.show()
+        plt.show()
 
         # Save the figure
         # Extract base filename and extension
@@ -135,7 +129,7 @@ for i in tqdm.tqdm(imfiles, desc="Processing images"):
 
     else:
         print("Vegetation quantification failed.")
-        data.append({'filename': i, 'green_ratio': None})
+        data.append({'filename': i, 'green_ratio': None, 'gcc_threshold': None})
 
 df = pd.DataFrame(data)
 df.to_csv(imoutfolder + 'green_ratio.csv', index=False, mode='w')
