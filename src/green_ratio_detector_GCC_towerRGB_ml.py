@@ -42,6 +42,7 @@ Shunan Feng (shf@ign.ku.dk)
 import cv2
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.patches import Patch
 import os
 import glob
 import tqdm
@@ -60,7 +61,7 @@ sns.set_theme(style="darkgrid", font_scale=1.5)
 
 #%%
 # Set the classification method to use
-classification_method = "kmeans"  # Options: "kmeans", "gmm", "dbscan", "spectral"
+classification_method = "gmm"  # Options: "kmeans", "gmm", "dbscan", "spectral"
 
 #%%
 imfolder = '/mnt/i/SCIENCE-IGN-ALL/AVOCA_Group/1_Personal_folders/1_Simon/1_Abisko/6_Tower_Data/Tower RGB images/1 Data/1 Years'
@@ -83,9 +84,9 @@ if not os.path.exists(results_dir):
     os.makedirs(results_dir)
 
 # Initialize the CSV file with headers
-csv_path = os.path.join(results_dir, 'green_ratio.csv')
+csv_path = os.path.join(results_dir, 'green_ratio' + classification_method + '.csv')
 with open(csv_path, 'w') as f:
-    f.write('filename,datetime,green_ratio,class1_ratio,class2_ratio,method\n')
+    f.write('filename,datetime,green_ratio,green_mean,green_std,green_norm,class1_ratio,class1_mean,class1_std,class1_norm,class2_ratio,class2_mean,class2_std,class2_norm,method\n')
 #%%
 def get_image_datetime(image_path):
     """
@@ -142,7 +143,11 @@ def quantify_vegetation_kmeans(img):
         img: The input image (BGR format)
 
     Returns:
-        tuple: Overall green ratio, green mask, class1 ratio, class2 ratio, class visualization
+        tuple: Overall green metrics (ratio, mean, std, norm_greenness),
+               green mask, 
+               class1 metrics (ratio, mean, std, norm_greenness), 
+               class2 metrics (ratio, mean, std, norm_greenness), 
+               class visualization
     """
     try:
         # Split the image into its BGR channels
@@ -166,6 +171,25 @@ def quantify_vegetation_kmeans(img):
         total_pixels = img.shape[0] * img.shape[1]
         green_ratio = green_pixels / total_pixels if total_pixels > 0 else 0
         
+        # Calculate mean and std greenness for all green pixels
+        green_pixels_mask = green_mask > 0
+        if green_pixels > 0:
+            mean_greenness = np.mean(greenness[green_pixels_mask])
+            std_greenness = np.std(greenness[green_pixels_mask])
+            norm_greenness = np.sum(greenness[green_pixels_mask]) / green_pixels
+        else:
+            mean_greenness = 0
+            std_greenness = 0
+            norm_greenness = 0
+            
+        # Store overall green metrics as a dictionary
+        green_metrics = {
+            'ratio': green_ratio,
+            'mean': mean_greenness,
+            'std': std_greenness,
+            'norm_greenness': norm_greenness
+        }
+        
         # ENHANCED CLASSIFICATION: Using K-means for vegetation class separation
         
         # Step 1: Create a masked green-only image
@@ -173,6 +197,12 @@ def quantify_vegetation_kmeans(img):
         
         # Step 2: Prepare data for K-means clustering - only include green pixels
         non_zero_mask = np.any(masked_green != 0, axis=2)
+        
+        # Initialize class metrics
+        class1_metrics = {'ratio': 0, 'mean': 0, 'std': 0, 'norm_greenness': 0}
+        class2_metrics = {'ratio': 0, 'mean': 0, 'std': 0, 'norm_greenness': 0}
+        visualization = np.zeros_like(img)
+        
         if np.sum(non_zero_mask) > 0:  # Check if there are green pixels
             # Extract features for clustering (using multiple channels for better separation)
             # Convert to LAB color space which is better for color-based segmentation
@@ -191,15 +221,13 @@ def quantify_vegetation_kmeans(img):
             # Then, set the labels only for green pixels
             full_labels[non_zero_mask] = labels.flatten()
             
-            # Determine which cluster is likely trees and which is understory
-            # Assuming trees are generally darker in the L channel of LAB
-            # This is a simplification - might need adjustment based on your specific images
+            # Determine which cluster is likely understory (darker) and which is trees (brighter)
             if centers[0][0] < centers[1][0]:  # Lower L value = darker
-                class1_mask = (full_labels == 0)  # Trees (darker)
-                class2_mask = (full_labels == 1)  # Understory (brighter)
+                class1_mask = (full_labels == 0)  # Understory (darker)
+                class2_mask = (full_labels == 1)  # Trees (brighter)
             else:
-                class1_mask = (full_labels == 1)  # Trees (darker)
-                class2_mask = (full_labels == 0)  # Understory (brighter)
+                class1_mask = (full_labels == 1)  # Understory (darker)
+                class2_mask = (full_labels == 0)  # Trees (brighter)
             
             # Calculate individual class ratios
             class1_pixels = np.sum(class1_mask)
@@ -208,18 +236,48 @@ def quantify_vegetation_kmeans(img):
             class1_ratio = class1_pixels / total_pixels if total_pixels > 0 else 0
             class2_ratio = class2_pixels / total_pixels if total_pixels > 0 else 0
             
+            # Calculate mean, std, and normalized greenness for each class
+            if class1_pixels > 0:
+                class1_mean = np.mean(greenness[class1_mask])
+                class1_std = np.std(greenness[class1_mask])
+                class1_norm_greenness = np.sum(greenness[class1_mask]) / class1_pixels
+            else:
+                class1_mean = 0
+                class1_std = 0
+                class1_norm_greenness = 0
+                
+            if class2_pixels > 0:
+                class2_mean = np.mean(greenness[class2_mask])
+                class2_std = np.std(greenness[class2_mask])
+                class2_norm_greenness = np.sum(greenness[class2_mask]) / class2_pixels
+            else:
+                class2_mean = 0
+                class2_std = 0
+                class2_norm_greenness = 0
+                
+            # Store class metrics
+            class1_metrics = {
+                'ratio': class1_ratio,
+                'mean': class1_mean,
+                'std': class1_std,
+                'norm_greenness': class1_norm_greenness
+            }
+            
+            class2_metrics = {
+                'ratio': class2_ratio,
+                'mean': class2_mean,
+                'std': class2_std,
+                'norm_greenness': class2_norm_greenness
+            }
+            
             # Create a visualization of the two classes
             visualization = np.zeros_like(img)
-            # Class 1 - trees (shown in blue)
+            # Class 1 - understory (shown in blue)
             visualization[class1_mask] = [255, 0, 0]
-            # Class 2 - understory (shown in green) 
+            # Class 2 - trees (shown in green) 
             visualization[class2_mask] = [0, 255, 0]
-        else:
-            class1_ratio = 0
-            class2_ratio = 0
-            visualization = np.zeros_like(img)
         
-        return green_ratio, green_mask, class1_ratio, class2_ratio, visualization
+        return green_metrics, green_mask, class1_metrics, class2_metrics, visualization
 
     except Exception as e:
         print(f"An error occurred: {e}")
@@ -237,7 +295,11 @@ def quantify_vegetation_gmm(img):
         img: The input image (BGR format)
         
     Returns:
-        tuple: Overall green ratio, green mask, class1 ratio, class2 ratio, class visualization
+        tuple: Overall green metrics (ratio, mean, std, norm_greenness),
+               green mask, 
+               class1 metrics (ratio, mean, std, norm_greenness), 
+               class2 metrics (ratio, mean, std, norm_greenness), 
+               class visualization
     """
     try:
         # First identify green pixels using GCC as before
@@ -253,6 +315,30 @@ def quantify_vegetation_gmm(img):
         green_pixels = np.sum(green_mask > 0)
         total_pixels = img.shape[0] * img.shape[1]
         green_ratio = green_pixels / total_pixels if total_pixels > 0 else 0
+        
+        # Calculate mean and std greenness for all green pixels
+        green_pixels_mask = green_mask > 0
+        if green_pixels > 0:
+            mean_greenness = np.mean(greenness[green_pixels_mask])
+            std_greenness = np.std(greenness[green_pixels_mask])
+            norm_greenness = np.sum(greenness[green_pixels_mask]) / green_pixels
+        else:
+            mean_greenness = 0
+            std_greenness = 0
+            norm_greenness = 0
+            
+        # Store overall green metrics as a dictionary
+        green_metrics = {
+            'ratio': green_ratio,
+            'mean': mean_greenness,
+            'std': std_greenness,
+            'norm_greenness': norm_greenness
+        }
+        
+        # Initialize class metrics
+        class1_metrics = {'ratio': 0, 'mean': 0, 'std': 0, 'norm_greenness': 0}
+        class2_metrics = {'ratio': 0, 'mean': 0, 'std': 0, 'norm_greenness': 0}
+        visualization = np.zeros_like(img)
         
         # Use GMM for classification if we have enough green pixels
         non_zero_mask = green_mask > 0
@@ -275,15 +361,15 @@ def quantify_vegetation_gmm(img):
             full_labels = np.zeros(img.shape[:2], dtype=int)
             full_labels[non_zero_mask] = labels + 1  # +1 so background is 0
             
-            # Determine which class is likely tree vs understory
+            # Determine which class is likely understory vs trees
             # Using means of H and V channels in HSV to distinguish
             means = gmm.means_
             if means[0][0] < means[1][0]:  # Lower hue value = more green-blue
-                class1_mask = full_labels == 1  # Trees
-                class2_mask = full_labels == 2  # Understory
+                class1_mask = full_labels == 1  # Understory (darker)
+                class2_mask = full_labels == 2  # Trees (brighter)
             else:
-                class1_mask = full_labels == 2  # Trees
-                class2_mask = full_labels == 1  # Understory
+                class1_mask = full_labels == 2  # Understory (darker)
+                class2_mask = full_labels == 1  # Trees (brighter)
                 
             class1_pixels = np.sum(class1_mask)
             class2_pixels = np.sum(class2_mask)
@@ -291,16 +377,46 @@ def quantify_vegetation_gmm(img):
             class1_ratio = class1_pixels / total_pixels if total_pixels > 0 else 0
             class2_ratio = class2_pixels / total_pixels if total_pixels > 0 else 0
             
+            # Calculate mean, std, and normalized greenness for each class
+            if class1_pixels > 0:
+                class1_mean = np.mean(greenness[class1_mask])
+                class1_std = np.std(greenness[class1_mask])
+                class1_norm_greenness = np.sum(greenness[class1_mask]) / class1_pixels
+            else:
+                class1_mean = 0
+                class1_std = 0
+                class1_norm_greenness = 0
+                
+            if class2_pixels > 0:
+                class2_mean = np.mean(greenness[class2_mask])
+                class2_std = np.std(greenness[class2_mask])
+                class2_norm_greenness = np.sum(greenness[class2_mask]) / class2_pixels
+            else:
+                class2_mean = 0
+                class2_std = 0
+                class2_norm_greenness = 0
+                
+            # Store class metrics
+            class1_metrics = {
+                'ratio': class1_ratio,
+                'mean': class1_mean,
+                'std': class1_std,
+                'norm_greenness': class1_norm_greenness
+            }
+            
+            class2_metrics = {
+                'ratio': class2_ratio,
+                'mean': class2_mean,
+                'std': class2_std,
+                'norm_greenness': class2_norm_greenness
+            }
+            
             # Visualization
             visualization = np.zeros_like(img)
-            visualization[class1_mask] = [255, 0, 0]  # Trees in blue
-            visualization[class2_mask] = [0, 255, 0]  # Understory in green
-        else:
-            class1_ratio = 0
-            class2_ratio = 0
-            visualization = np.zeros_like(img)
+            visualization[class1_mask] = [255, 0, 0]  # Understory in blue
+            visualization[class2_mask] = [0, 255, 0]  # Trees in green
             
-        return green_ratio, green_mask, class1_ratio, class2_ratio, visualization
+        return green_metrics, green_mask, class1_metrics, class2_metrics, visualization
         
     except Exception as e:
         print(f"An error occurred in GMM clustering: {e}")
@@ -318,7 +434,11 @@ def quantify_vegetation_dbscan(img):
         img: The input image (BGR format)
         
     Returns:
-        tuple: Overall green ratio, green mask, class1 ratio, class2 ratio, class visualization
+        tuple: Overall green metrics (ratio, mean, std, norm_greenness),
+               green mask, 
+               class1 metrics (ratio, mean, std, norm_greenness), 
+               class2 metrics (ratio, mean, std, norm_greenness), 
+               class visualization
     """
     try:
         # Identify green pixels using GCC
@@ -331,6 +451,30 @@ def quantify_vegetation_dbscan(img):
         green_pixels = np.sum(green_mask > 0)
         total_pixels = img.shape[0] * img.shape[1]
         green_ratio = green_pixels / total_pixels if total_pixels > 0 else 0
+        
+        # Calculate mean and std greenness for all green pixels
+        green_pixels_mask = green_mask > 0
+        if green_pixels > 0:
+            mean_greenness = np.mean(greenness[green_pixels_mask])
+            std_greenness = np.std(greenness[green_pixels_mask])
+            norm_greenness = np.sum(greenness[green_pixels_mask]) / green_pixels
+        else:
+            mean_greenness = 0
+            std_greenness = 0
+            norm_greenness = 0
+            
+        # Store overall green metrics as a dictionary
+        green_metrics = {
+            'ratio': green_ratio,
+            'mean': mean_greenness,
+            'std': std_greenness,
+            'norm_greenness': norm_greenness
+        }
+        
+        # Initialize class metrics
+        class1_metrics = {'ratio': 0, 'mean': 0, 'std': 0, 'norm_greenness': 0}
+        class2_metrics = {'ratio': 0, 'mean': 0, 'std': 0, 'norm_greenness': 0}
+        visualization = np.zeros_like(img)
         
         # Apply DBSCAN if enough green pixels
         non_zero_mask = green_mask > 0
@@ -371,13 +515,12 @@ def quantify_vegetation_dbscan(img):
                 class2_label = unique_labels[largest_indices[0]]  # Second largest
                 
                 # Create full mask for visualization
-                full_labels = np.zeros(img.shape[:2], dtype=int)
                 class1_indices = np.where(labels == class1_label)[0]
                 class2_indices = np.where(labels == class2_label)[0]
                 
                 # Map back to original coordinates
                 y1, x1 = y_coords[class1_indices], x_coords[class1_indices]
-                y2, x2 = y_coords[class2_indices], x_coords[class2_indices]
+                y2, x2 = y_coords[class2_indices]
                 
                 # Create masks
                 class1_mask = np.zeros(img.shape[:2], dtype=bool)
@@ -388,29 +531,64 @@ def quantify_vegetation_dbscan(img):
                 # Calculate ratios
                 class1_pixels = np.sum(class1_mask)
                 class2_pixels = np.sum(class2_mask)
-                class1_ratio = class1_pixels / total_pixels
-                class2_ratio = class2_pixels / total_pixels
+                class1_ratio = class1_pixels / total_pixels if total_pixels > 0 else 0
+                class2_ratio = class2_pixels / total_pixels if total_pixels > 0 else 0
+                
+                # Calculate mean, std, and normalized greenness for each class
+                if class1_pixels > 0:
+                    class1_mean = np.mean(greenness[class1_mask])
+                    class1_std = np.std(greenness[class1_mask])
+                    class1_norm_greenness = np.sum(greenness[class1_mask]) / class1_pixels
+                else:
+                    class1_mean = 0
+                    class1_std = 0
+                    class1_norm_greenness = 0
+                    
+                if class2_pixels > 0:
+                    class2_mean = np.mean(greenness[class2_mask])
+                    class2_std = np.std(greenness[class2_mask])
+                    class2_norm_greenness = np.sum(greenness[class2_mask]) / class2_pixels
+                else:
+                    class2_mean = 0
+                    class2_std = 0
+                    class2_norm_greenness = 0
+                    
+                # Store class metrics
+                class1_metrics = {
+                    'ratio': class1_ratio,
+                    'mean': class1_mean,
+                    'std': class1_std,
+                    'norm_greenness': class1_norm_greenness
+                }
+                
+                class2_metrics = {
+                    'ratio': class2_ratio,
+                    'mean': class2_mean,
+                    'std': class2_std,
+                    'norm_greenness': class2_norm_greenness
+                }
                 
                 # Create visualization
                 visualization = np.zeros_like(img)
-                visualization[class1_mask] = [255, 0, 0]  # Likely trees
-                visualization[class2_mask] = [0, 255, 0]  # Likely understory
+                visualization[class1_mask] = [255, 0, 0]  # Likely understory 
+                visualization[class2_mask] = [0, 255, 0]  # Likely trees
             else:
-                # Not enough clusters found
-                class1_ratio = green_ratio
-                class2_ratio = 0
+                # Not enough clusters found - use all green pixels as class1
+                class1_metrics = {
+                    'ratio': green_ratio,
+                    'mean': mean_greenness,
+                    'std': std_greenness,
+                    'norm_greenness': norm_greenness
+                }
+                
                 visualization = np.zeros_like(img)
                 visualization[non_zero_mask] = [255, 0, 0]
-        else:
-            class1_ratio = 0
-            class2_ratio = 0
-            visualization = np.zeros_like(img)
-            
-        return green_ratio, green_mask, class1_ratio, class2_ratio, visualization
+        
+        return green_metrics, green_mask, class1_metrics, class2_metrics, visualization
         
     except Exception as e:
         print(f"An error occurred in DBSCAN clustering: {e}")
-        return None, None, None, None, None    
+        return None, None, None, None, None
 
 def quantify_vegetation_spectral(img):
     """
@@ -424,7 +602,11 @@ def quantify_vegetation_spectral(img):
         img: The input image (BGR format)
         
     Returns:
-        tuple: Overall green ratio, green mask, class1 ratio, class2 ratio, class visualization
+        tuple: Overall green metrics (ratio, mean, std, norm_greenness),
+               green mask, 
+               class1 metrics (ratio, mean, std, norm_greenness), 
+               class2 metrics (ratio, mean, std, norm_greenness), 
+               class visualization
     """
     try:
         # Identify green pixels
@@ -437,6 +619,30 @@ def quantify_vegetation_spectral(img):
         green_pixels = np.sum(green_mask > 0)
         total_pixels = img.shape[0] * img.shape[1]
         green_ratio = green_pixels / total_pixels if total_pixels > 0 else 0
+        
+        # Calculate mean and std greenness for all green pixels
+        green_pixels_mask = green_mask > 0
+        if green_pixels > 0:
+            mean_greenness = np.mean(greenness[green_pixels_mask])
+            std_greenness = np.std(greenness[green_pixels_mask])
+            norm_greenness = np.sum(greenness[green_pixels_mask]) / green_pixels
+        else:
+            mean_greenness = 0
+            std_greenness = 0
+            norm_greenness = 0
+            
+        # Store overall green metrics as a dictionary
+        green_metrics = {
+            'ratio': green_ratio,
+            'mean': mean_greenness,
+            'std': std_greenness,
+            'norm_greenness': norm_greenness
+        }
+        
+        # Initialize class metrics
+        class1_metrics = {'ratio': 0, 'mean': 0, 'std': 0, 'norm_greenness': 0}
+        class2_metrics = {'ratio': 0, 'mean': 0, 'std': 0, 'norm_greenness': 0}
+        visualization = np.zeros_like(img)
         
         # Apply spectral clustering
         non_zero_mask = green_mask > 0
@@ -485,22 +691,52 @@ def quantify_vegetation_spectral(img):
             class1_mask[y_indices[class1_indices], x_indices[class1_indices]] = True
             class2_mask[y_indices[class2_indices], x_indices[class2_indices]] = True
             
-            # Calculate ratios
+            # Calculate individual class ratios
             class1_pixels = np.sum(class1_mask)
             class2_pixels = np.sum(class2_mask)
-            class1_ratio = class1_pixels / total_pixels
-            class2_ratio = class2_pixels / total_pixels
+            class1_ratio = class1_pixels / total_pixels if total_pixels > 0 else 0
+            class2_ratio = class2_pixels / total_pixels if total_pixels > 0 else 0
+            
+            # Calculate mean, std, and normalized greenness for each class
+            if class1_pixels > 0:
+                class1_mean = np.mean(greenness[class1_mask])
+                class1_std = np.std(greenness[class1_mask])
+                class1_norm_greenness = np.sum(greenness[class1_mask]) / class1_pixels
+            else:
+                class1_mean = 0
+                class1_std = 0
+                class1_norm_greenness = 0
+                
+            if class2_pixels > 0:
+                class2_mean = np.mean(greenness[class2_mask])
+                class2_std = np.std(greenness[class2_mask])
+                class2_norm_greenness = np.sum(greenness[class2_mask]) / class2_pixels
+            else:
+                class2_mean = 0
+                class2_std = 0
+                class2_norm_greenness = 0
+                
+            # Store class metrics
+            class1_metrics = {
+                'ratio': class1_ratio,
+                'mean': class1_mean,
+                'std': class1_std,
+                'norm_greenness': class1_norm_greenness
+            }
+            
+            class2_metrics = {
+                'ratio': class2_ratio,
+                'mean': class2_mean,
+                'std': class2_std,
+                'norm_greenness': class2_norm_greenness
+            }
             
             # Create visualization
             visualization = np.zeros_like(img)
-            visualization[class1_mask] = [255, 0, 0]  # Likely trees 
-            visualization[class2_mask] = [0, 255, 0]  # Likely understory
-        else:
-            class1_ratio = 0
-            class2_ratio = 0
-            visualization = np.zeros_like(img)
+            visualization[class1_mask] = [255, 0, 0]  # Likely understory 
+            visualization[class2_mask] = [0, 255, 0]  # Likely trees
             
-        return green_ratio, green_mask, class1_ratio, class2_ratio, visualization
+        return green_metrics, green_mask, class1_metrics, class2_metrics, visualization
         
     except Exception as e:
         print(f"An error occurred in spectral clustering: {e}")
@@ -515,7 +751,11 @@ def quantify_vegetation(img, method="kmeans"):
         method: Clustering method to use ('kmeans', 'gmm', 'dbscan', 'spectral')
         
     Returns:
-        tuple: Overall green ratio, green mask, class1 ratio, class2 ratio, class visualization
+        tuple: Overall green metrics (ratio, mean, std, norm_greenness),
+               green mask, 
+               class1 metrics (ratio, mean, std, norm_greenness), 
+               class2 metrics (ratio, mean, std, norm_greenness), 
+               class visualization
     """
     if method == "kmeans":
         print("Using K-means clustering")
@@ -549,16 +789,21 @@ for i in tqdm.tqdm(imfiles, desc="Processing images"):
     print(f"Image datetime: {datetime_str}")
     
     # Quantify vegetation within the whole image using the selected method
-    ratio, green_mask, class1_ratio, class2_ratio, class_vis = quantify_vegetation(img, method=classification_method)
+    green_metrics, green_mask, class1_metrics, class2_metrics, class_vis = quantify_vegetation(img, method=classification_method)
 
-    if ratio is not None:
-        print(f"The green pixel ratio is: {ratio:.4f}")
-        print(f"Class 1 (likely trees) ratio: {class1_ratio:.4f}")
-        print(f"Class 2 (likely understory) ratio: {class2_ratio:.4f}")
+    if green_metrics is not None:
+        print(f"The green pixel ratio is: {green_metrics['ratio']:.4f}")
+        print(f"Green mean: {green_metrics['mean']:.4f}, std: {green_metrics['std']:.4f}, normalized: {green_metrics['norm_greenness']:.4f}")
+        print(f"Class 1 ratio: {class1_metrics['ratio']:.4f}, mean: {class1_metrics['mean']:.4f}, std: {class1_metrics['std']:.4f}")
+        print(f"Class 2 ratio: {class2_metrics['ratio']:.4f}, mean: {class2_metrics['mean']:.4f}, std: {class2_metrics['std']:.4f}")
         
         # Write result to CSV immediately
         with open(csv_path, 'a') as f:
-            f.write(f'{i},{datetime_str},{ratio},{class1_ratio},{class2_ratio},{classification_method}\n')
+            f.write(f'{i},{datetime_str},'
+                    f'{green_metrics["ratio"]},{green_metrics["mean"]},{green_metrics["std"]},{green_metrics["norm_greenness"]},'
+                    f'{class1_metrics["ratio"]},{class1_metrics["mean"]},{class1_metrics["std"]},{class1_metrics["norm_greenness"]},'
+                    f'{class2_metrics["ratio"]},{class2_metrics["mean"]},{class2_metrics["std"]},{class2_metrics["norm_greenness"]},'
+                    f'{classification_method}\n')
 
         # Apply the green mask to the image
         masked_img = cv2.bitwise_and(img, img, mask=green_mask // 255)
@@ -580,13 +825,26 @@ for i in tqdm.tqdm(imfiles, desc="Processing images"):
 
         # Display the masked image
         axes[1].imshow(masked_img_rgb)
-        axes[1].set_title(f"Green Masked (GR={ratio:.2f})")
+        axes[1].set_title(f"Green Masked (GR={green_metrics['ratio']:.2f}, Norm={green_metrics['norm_greenness']:.2f})")
         axes[1].axis('off')  # Hide the axes
         
         # Display the vegetation classes
         axes[2].imshow(class_vis_rgb)
-        axes[2].set_title(f"Vegetation Classes ({classification_method})\nTrees={class1_ratio:.2f}, Understory={class2_ratio:.2f}")
+        axes[2].set_title(f"Vegetation Classes ({classification_method})\n"
+                  f"class1={class1_metrics['ratio']:.2f} (Norm={class1_metrics['norm_greenness']:.2f})\n"
+                  f"class2={class2_metrics['ratio']:.2f} (Norm={class2_metrics['norm_greenness']:.2f})")
         axes[2].axis('off')
+        
+        # Create custom legend elements
+        legend_elements = [
+            Patch(facecolor='blue', edgecolor='black', label='Class 1'),
+            Patch(facecolor='green', edgecolor='black', label='Class 2')
+        ]
+        
+        # Add legend to the bottom of the third subplot
+        axes[2].legend(handles=legend_elements, loc='lower center', 
+                  bbox_to_anchor=(0.5, -0.3), frameon=True, 
+                  facecolor='white', edgecolor='black')
 
         plt.tight_layout()  # Adjust layout to prevent overlapping titles
 
@@ -611,6 +869,6 @@ for i in tqdm.tqdm(imfiles, desc="Processing images"):
         print(f"Vegetation quantification failed for {i}")
         # Write failure to CSV
         with open(csv_path, 'a') as f:
-            f.write(f'{i},{datetime_str},NA,NA,NA,{classification_method}\n')
+            f.write(f'{i},{datetime_str},NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,{classification_method}\n')
 
 print(f"Done! Results saved to {csv_path}")
