@@ -35,8 +35,8 @@ import glob
 import pandas as pd
 import tqdm
 import seaborn as sns
-import datetime
-import re
+# import datetime
+# import re
 sns.set_theme(style="darkgrid", font_scale=1.5)
 #%%
 imfolder = '/mnt/i/SCIENCE-IGN-ALL/AVOCA_Group/2_Shared_folders/1_Data/1_Abisko/9_RGB_Close-up/1_CHMB/0_ALL/'
@@ -45,7 +45,7 @@ imfiles.extend(glob.glob(imfolder + '**/*.JPG', recursive=True))
 imfiles.extend(glob.glob(imfolder + '**/*.jpg', recursive=True))
 imfiles.extend(glob.glob(imfolder + '**/*.JPEG', recursive=True))
 imfiles.extend(glob.glob(imfolder + '**/*.jpeg', recursive=True))
-imoutfolder = '/mnt/i/SCIENCE-IGN-ALL/AVOCA_Group/2_Shared_folders/1_Data/1_Abisko/9_RGB_Close-up/1_CHMB/0_ALL_green_ratio/'
+imoutfolder = '/mnt/i/SCIENCE-IGN-ALL/AVOCA_Group/2_Shared_folders/1_Data/1_Abisko/9_RGB_Close-up/1_CHMB/0_ALL_green_ratio_std_low/'
 if not os.path.exists(imoutfolder):
     os.makedirs(imoutfolder)
 #%%    
@@ -73,7 +73,7 @@ def quantify_vegetation(img):
         greenness = g / (r + g + b + 1e-10) #  
 
         # Create a binary mask using a threshold (adjust as needed)
-        threshold = 0.36  # don't ask me why this value
+        threshold = 0.3977 - 0.0299 # don't ask me why this value
         green_mask = (greenness > threshold).astype(np.uint8) * 255
         
         # Count green pixels and calculate ratio
@@ -141,50 +141,50 @@ df = pd.DataFrame(data)
 df.to_csv(imoutfolder + 'green_ratio.csv', index=False, mode='w')
 print(f"Done! Results saved to {imoutfolder + 'green_ratio.csv'}")
 # %% visualize the results
-df = pd.read_csv(imoutfolder + 'green_ratio.csv')
-df['imname'] = df.filename.apply(lambda x: os.path.basename(x))
-# Extract datetime from filenames with pattern like "07-07-2022_E2.JPG"
+# df = pd.read_csv(imoutfolder + 'green_ratio.csv')
+# df['imname'] = df.filename.apply(lambda x: os.path.basename(x))
+# # Extract datetime from filenames with pattern like "07-07-2022_E2.JPG"
 
-# Regular expression pattern for "DD-MM-YYYY" format
-date_pattern = re.compile(r'(\d{2})-(\d{2})-(\d{4})_')
+# # Regular expression pattern for "DD-MM-YYYY" format
+# date_pattern = re.compile(r'(\d{2})-(\d{2})-(\d{4})_')
 
-# Function to extract datetime from filename
-def extract_datetime(filename):
-    match = date_pattern.search(filename)
-    if match:
-        day, month, year = match.groups()
-        try:
-            return datetime.datetime(int(year), int(month), int(day))
-        except ValueError:
-            return None
-    return None
+# # Function to extract datetime from filename
+# def extract_datetime(filename):
+#     match = date_pattern.search(filename)
+#     if match:
+#         day, month, year = match.groups()
+#         try:
+#             return datetime.datetime(int(year), int(month), int(day))
+#         except ValueError:
+#             return None
+#     return None
 
-# Apply the function to create a datetime column
-df['datetime'] = df['imname'].apply(extract_datetime)
+# # Apply the function to create a datetime column
+# df['datetime'] = df['imname'].apply(extract_datetime)
 
-# Filter dataframe to only include rows with valid datetime
-df_with_dates = df.dropna(subset=['datetime'])
+# # Filter dataframe to only include rows with valid datetime
+# df_with_dates = df.dropna(subset=['datetime'])
 
-# Print information about files with dates
-if not df_with_dates.empty:
-    print(f"Found {len(df_with_dates)} images with date information in the filename")
-    print(f"Date range: {df_with_dates['datetime'].min().date()} to {df_with_dates['datetime'].max().date()}")
+# # Print information about files with dates
+# if not df_with_dates.empty:
+#     print(f"Found {len(df_with_dates)} images with date information in the filename")
+#     print(f"Date range: {df_with_dates['datetime'].min().date()} to {df_with_dates['datetime'].max().date()}")
     
-    # Display the first few entries with dates
-    print("\nSample of images with dates:")
-    print(df_with_dates[['imname', 'datetime', 'green_ratio']].head())
-else:
-    print("No images with date information in the filename were found")
-# %%
-df = df.dropna(subset='datetime')
-df['year'] = df['datetime'].dt.year
+#     # Display the first few entries with dates
+#     print("\nSample of images with dates:")
+#     print(df_with_dates[['imname', 'datetime', 'green_ratio']].head())
+# else:
+#     print("No images with date information in the filename were found")
+# # %%
+# df = df.dropna(subset='datetime')
+# df['year'] = df['datetime'].dt.year
 
-sns.boxplot(x='year', y='green_ratio', data=df)
-plt.title("Green Ratio by Year")
-plt.ylabel("Green Ratio")
-plt.xlabel("Year")
+# sns.boxplot(x='year', y='green_ratio', data=df)
+# plt.title("Green Ratio by Year")
+# plt.ylabel("Green Ratio")
+# plt.xlabel("Year")
 
-#%%
-df['doy'] = df['datetime'].dt.dayofyear
-sns.lineplot(x='doy', y='green_ratio', data=df, hue='year')
-# %%
+# #%%
+# df['doy'] = df['datetime'].dt.dayofyear
+# sns.lineplot(x='doy', y='green_ratio', data=df, hue='year')
+# # %%
