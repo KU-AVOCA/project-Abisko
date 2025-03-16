@@ -61,7 +61,7 @@ sns.set_theme(style="darkgrid", font_scale=1.5)
 
 #%%
 # Set the classification method to use
-classification_method = "gmm"  # Options: "kmeans", "gmm", "dbscan", "spectral"
+classification_method = "kmeans"  # Options: "kmeans", "gmm", "dbscan", "spectral"
 
 #%%
 imfolder = '/mnt/i/SCIENCE-IGN-ALL/AVOCA_Group/1_Personal_folders/1_Simon/1_Abisko/6_Tower_Data/Tower RGB images/1 Data/1 Years'
@@ -74,7 +74,7 @@ imfiles.extend(glob.glob(os.path.join(imfolder, '**/', '*.png'), recursive=True)
 imfiles.extend(glob.glob(os.path.join(imfolder, '**/', '*.PNG'), recursive=True))
 print(f"Found {len(imfiles)} images in {imfolder}")
 
-imoutfolder = '/mnt/i/SCIENCE-IGN-ALL/AVOCA_Group/1_Personal_folders/1_Simon/1_Abisko/6_Tower_Data/Tower RGB images/1_Data_greenessByShunan_' + classification_method
+imoutfolder = '/mnt/i/SCIENCE-IGN-ALL/AVOCA_Group/2_Shared_folders/5_Projects/2025Abisko/Tower RGB images/Data_greenessByShunan_' + classification_method
 if not os.path.exists(imoutfolder):
     os.makedirs(imoutfolder)
 #%%
@@ -163,7 +163,7 @@ def quantify_vegetation_kmeans(img):
         greenness = g / (r + g + b + 1e-10)
 
         # Create a binary mask using a threshold (adjust as needed)
-        threshold = 0.36
+        threshold = 0.37 # 0.37 +- 0.07
         green_mask = (greenness > threshold).astype(np.uint8) * 255
         
         # Count green pixels and calculate ratio
@@ -309,7 +309,7 @@ def quantify_vegetation_gmm(img):
         r = r.astype(float)
         
         greenness = g / (r + g + b + 1e-10)
-        threshold = 0.36
+        threshold = 0.37 # 0.37 +- 0.07
         green_mask = (greenness > threshold).astype(np.uint8) * 255
         
         green_pixels = np.sum(green_mask > 0)
@@ -445,7 +445,7 @@ def quantify_vegetation_dbscan(img):
         b, g, r = cv2.split(img)
         b, g, r = b.astype(float), g.astype(float), r.astype(float)
         greenness = g / (r + g + b + 1e-10)
-        threshold = 0.36
+        threshold = 0.37 # 0.37 +- 0.07
         green_mask = (greenness > threshold).astype(np.uint8) * 255
         
         green_pixels = np.sum(green_mask > 0)
@@ -613,7 +613,7 @@ def quantify_vegetation_spectral(img):
         b, g, r = cv2.split(img)
         b, g, r = b.astype(float), g.astype(float), r.astype(float)
         greenness = g / (r + g + b + 1e-10)
-        threshold = 0.36
+        threshold = 0.37 # 0.37 +- 0.07
         green_mask = (greenness > threshold).astype(np.uint8) * 255
         
         green_pixels = np.sum(green_mask > 0)

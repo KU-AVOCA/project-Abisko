@@ -39,13 +39,22 @@ import seaborn as sns
 # import re
 sns.set_theme(style="darkgrid", font_scale=1.5)
 #%%
-imfolder = '/mnt/i/SCIENCE-IGN-ALL/AVOCA_Group/2_Shared_folders/1_Data/1_Abisko/9_RGB_Close-up/1_CHMB/0_ALL/'
+imfolder1 = '/mnt/i/SCIENCE-IGN-ALL/AVOCA_Group/1_Personal_folders/1_Simon/1_Abisko/4_CHMB_RGB/3_2023/2_Work/2_Cropped/'
 imfiles = []
-imfiles.extend(glob.glob(imfolder + '**/*.JPG', recursive=True))
-imfiles.extend(glob.glob(imfolder + '**/*.jpg', recursive=True))
-imfiles.extend(glob.glob(imfolder + '**/*.JPEG', recursive=True))
-imfiles.extend(glob.glob(imfolder + '**/*.jpeg', recursive=True))
-imoutfolder = '/mnt/i/SCIENCE-IGN-ALL/AVOCA_Group/2_Shared_folders/1_Data/1_Abisko/9_RGB_Close-up/1_CHMB/0_ALL_green_ratio_std_low/'
+imfiles.extend(glob.glob(imfolder1 + '**/*.JPG', recursive=True))
+imfiles.extend(glob.glob(imfolder1 + '**/*.jpg', recursive=True))
+imfiles.extend(glob.glob(imfolder1 + '**/*.JPEG', recursive=True))
+imfiles.extend(glob.glob(imfolder1 + '**/*.jpeg', recursive=True))   
+
+imfolder2 = '/mnt/i/SCIENCE-IGN-ALL/AVOCA_Group/1_Personal_folders/1_Simon/1_Abisko/4_CHMB_RGB/2_2022/2_Work/2_Cropped/'
+imfiles.extend(glob.glob(imfolder2 + '**/*.JPG', recursive=True))
+imfiles.extend(glob.glob(imfolder2 + '**/*.jpg', recursive=True))
+imfiles.extend(glob.glob(imfolder2 + '**/*.JPEG', recursive=True))
+imfiles.extend(glob.glob(imfolder2 + '**/*.jpeg', recursive=True))
+
+print(f"Found {len(imfiles)} images in total")
+
+imoutfolder = '/mnt/i/SCIENCE-IGN-ALL/AVOCA_Group/2_Shared_folders/5_Projects/2025Abisko/closeup_green_ratio_mean/'
 if not os.path.exists(imoutfolder):
     os.makedirs(imoutfolder)
 #%%    
@@ -73,7 +82,7 @@ def quantify_vegetation(img):
         greenness = g / (r + g + b + 1e-10) #  
 
         # Create a binary mask using a threshold (adjust as needed)
-        threshold = 0.3977 - 0.0299 # don't ask me why this value
+        threshold = 0.37 # 0.37 +- 0.07
         green_mask = (greenness > threshold).astype(np.uint8) * 255
         
         # Count green pixels and calculate ratio

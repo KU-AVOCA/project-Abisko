@@ -39,13 +39,22 @@ from scipy import stats
 # import re
 sns.set_theme(style="darkgrid", font_scale=1.5)
 #%%
-imfolder = '/mnt/i/SCIENCE-IGN-ALL/AVOCA_Group/2_Shared_folders/1_Data/1_Abisko/9_RGB_Close-up/1_CHMB/0_ALL/'
+imfolder1 = '/mnt/i/SCIENCE-IGN-ALL/AVOCA_Group/1_Personal_folders/1_Simon/1_Abisko/4_CHMB_RGB/3_2023/2_Work/2_Cropped/'
 imfiles = []
-imfiles.extend(glob.glob(imfolder + '**/*.JPG', recursive=True))
-imfiles.extend(glob.glob(imfolder + '**/*.jpg', recursive=True))
-imfiles.extend(glob.glob(imfolder + '**/*.JPEG', recursive=True))
-imfiles.extend(glob.glob(imfolder + '**/*.jpeg', recursive=True))
-imoutfolder = '/mnt/i/SCIENCE-IGN-ALL/AVOCA_Group/2_Shared_folders/1_Data/1_Abisko/9_RGB_Close-up/1_CHMB/0_ALL_green_ratio_determinethreshold/'
+imfiles.extend(glob.glob(imfolder1 + '**/*.JPG', recursive=True))
+imfiles.extend(glob.glob(imfolder1 + '**/*.jpg', recursive=True))
+imfiles.extend(glob.glob(imfolder1 + '**/*.JPEG', recursive=True))
+imfiles.extend(glob.glob(imfolder1 + '**/*.jpeg', recursive=True))   
+
+imfolder2 = '/mnt/i/SCIENCE-IGN-ALL/AVOCA_Group/1_Personal_folders/1_Simon/1_Abisko/4_CHMB_RGB/2_2022/2_Work/2_Cropped/'
+imfiles.extend(glob.glob(imfolder2 + '**/*.JPG', recursive=True))
+imfiles.extend(glob.glob(imfolder2 + '**/*.jpg', recursive=True))
+imfiles.extend(glob.glob(imfolder2 + '**/*.JPEG', recursive=True))
+imfiles.extend(glob.glob(imfolder2 + '**/*.jpeg', recursive=True))
+
+print(f"Found {len(imfiles)} images in total")
+
+imoutfolder = '/mnt/i/SCIENCE-IGN-ALL/AVOCA_Group/2_Shared_folders/5_Projects/2025Abisko/closeup_green_ratio_determinethreshold/'
 if not os.path.exists(imoutfolder):
     os.makedirs(imoutfolder)
 #%%    
@@ -108,7 +117,7 @@ def determine_threshold_otsu(img):
     
     # Filter out pixels with low GCC (< 0.2)
     filtered_greenness = greenness.copy()
-    filtered_greenness[greenness < 0.2] = 0
+    # filtered_greenness[greenness < 0.2] = 0
     
     # Scale to 0-255 for Otsu
     greenness_scaled = (filtered_greenness * 255).astype(np.uint8)
@@ -222,7 +231,11 @@ df = pd.read_csv(imoutfolder + 'green_ratio.csv')
 df = df.dropna(subset=['threshold', 'green_ratio'])
 # Filter out thresholds <= 0.2 as they likely represent non-vegetation
 # df = df[df['threshold'] > 0.2]
-sns.histplot(df['threshold'], bins=20)
+sns.boxplot(x='threshold', data=df)
+print(f"the mean threshold is {df['threshold'].mean():.2f}")
+print(f"the median threshold is {df['threshold'].median():.2f}")
+print(f"the std threshold is {df['threshold'].std():.2f}")
+
 #%% remove outliers
 # q1 = df['threshold'].quantile(0.25)
 # q3 = df['threshold'].quantile(0.75)
@@ -230,43 +243,80 @@ sns.histplot(df['threshold'], bins=20)
 # lower_bound = q1 - 1.5 * iqr
 # upper_bound = q3 + 1.5 * iqr
 # df = df[(df['threshold'] > lower_bound) & (df['threshold'] < upper_bound)]
-# sns.histplot(df['threshold'], bins=20)
-# print(f"the mean threshold is {df['threshold'].mean():.4f}")
-# print(f"the median threshold is {df['threshold'].median():.4f}")
-# print(f"the std threshold is {df['threshold'].std():.4f}")
+# # sns.histplot(df['threshold'], bins=20)
+# print(f"the mean threshold is {df['threshold'].mean():.2f}")
+# print(f"the median threshold is {df['threshold'].median():.2f}")
+# print(f"the std threshold is {df['threshold'].std():.2f}")
 # %% remove outliers using MAD
-def remove_outliers_mad(df, column='threshold', threshold_factor=2.5):
-    """
-    Remove outliers using Median Absolute Deviation from scipy.stats - more robust than IQR
-    """
+# def remove_outliers_mad(df, column='threshold'):
+#     """
+#     Remove outliers using Median Absolute Deviation from scipy.stats - more robust than IQR
+#     """
     
-    median = df[column].median()
-    # Calculate MAD using scipy.stats
-    mad = stats.median_abs_deviation(df[column], scale="normal")
-    
-    # Scale factor for normal distribution (1.4826 for normal distribution)
-    mad_scaled = mad #* 1.4826 is already assumed by setting scale="normal"
-    
-    # Define bounds
-    lower_bound = median - threshold_factor * mad_scaled
-    upper_bound = median + threshold_factor * mad_scaled
-    
-    print(f"MAD bounds: {lower_bound:.4f} to {upper_bound:.4f}")
-    
-    # Filter dataframe
-    filtered_df = df[(df[column] >= lower_bound) & (df[column] <= upper_bound)]
-    print(f"Removed {len(df) - len(filtered_df)} outliers using MAD method")
-    
-    return filtered_df
+#     median = df[column].median()
+#     # Calculate MAD using scipy.stats
+#     mad = stats.median_abs_deviation(df[column], scale=1)
 
-# Usage:
-df_filtered_mad = remove_outliers_mad(df)
-sns.histplot(df_filtered_mad['threshold'], bins=20, color='green')
-plt.title('Threshold Distribution after MAD Filtering')
+#     q75_scale = 1 / df[column].quantile(0.75)
+    
+#     # Scale factor for normal distribution (1.4826 for normal distribution)
+#     mad_scaled = mad * 1.4826 #q75_scale #
+    
+#     # Define bounds
+#     lower_bound = median - mad_scaled
+#     upper_bound = median + mad_scaled
+    
+#     print(f"MAD bounds: {lower_bound:.4f} to {upper_bound:.4f}")
+#     print(f"Q75: {df[column].quantile(0.75)}")
+#     print(f"Q25: {df[column].quantile(0.25)}")
+    
+#     # Filter dataframe
+#     filtered_df = df[(df[column] > lower_bound) & (df[column] < upper_bound)]
+#     print(f"Removed {len(df) - len(filtered_df)} outliers using MAD method")
+    
+#     return filtered_df
 
-print(f"Mean threshold (MAD): {df_filtered_mad['threshold'].mean():.4f}")
-print(f"Median threshold (MAD): {df_filtered_mad['threshold'].median():.4f}")
-print(f"Std threshold (MAD): {df_filtered_mad['threshold'].std():.4f}")
+# # Usage:
+# df_filtered_mad = remove_outliers_mad(df)
+# sns.histplot(df_filtered_mad['threshold'], bins=15, color='green')
+# plt.title('Threshold Distribution after MAD Filtering')
+
+# print(f"Mean threshold (MAD): {df_filtered_mad['threshold'].mean():.2f}")
+# print(f"Median threshold (MAD): {df_filtered_mad['threshold'].median():.2f}")
+# print(f"Std threshold (MAD): {df_filtered_mad['threshold'].std():.2f}")
+
+# def remove_outliers_mad(df, column='threshold', threshold_factor=2.5):
+#     """
+#     Remove outliers using Median Absolute Deviation with NumPy - more robust than IQR
+    
+#     Args:
+#         df: DataFrame containing the data
+#         column: Column name to filter outliers from
+#         threshold_factor: Multiplier for MAD to determine outlier boundaries
+        
+#     Returns:
+#         DataFrame with outliers removed
+#     """
+#     # Calculate median
+#     median = np.median(df[column])
+    
+#     # Calculate MAD using NumPy
+#     mad = np.median(np.abs(df[column] - median))
+    
+#     # Scale factor for normal distribution
+#     mad_scaled = mad * 1.4826 #* threshold_factor
+    
+#     # Define bounds
+#     lower_bound = median - mad_scaled
+#     upper_bound = median + mad_scaled
+    
+#     print(f"MAD bounds: {lower_bound:.4f} to {upper_bound:.4f}")
+    
+#     # Filter dataframe
+#     filtered_df = df[(df[column] >= lower_bound) & (df[column] <= upper_bound)]
+#     print(f"Removed {len(df) - len(filtered_df)} outliers using MAD method")
+    
+#     return filtered_df
 # %% visualize the results
 # df = pd.read_csv(imoutfolder + 'green_ratio.csv')
 # df['imname'] = df.filename.apply(lambda x: os.path.basename(x))
