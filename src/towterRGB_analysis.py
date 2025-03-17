@@ -51,7 +51,7 @@ def is_daytime(row, min_elevation=5.0):
         return False
 
 #%% Load and process data
-csvfile = '/mnt/i/SCIENCE-IGN-ALL/AVOCA_Group/1_Personal_folders/1_Simon/1_Abisko/6_Tower_Data/Tower RGB images/1_Data_greenessByShunan_kmeans/results/green_ratio_kmeans.csv'
+csvfile = '/mnt/i/SCIENCE-IGN-ALL/AVOCA_Group/1_Personal_folders/1_Simon/1_Abisko/6_Tower_Data/Tower RGB images/1_Data_greenessByShunan_kmeans_36/results/green_ratio_kmeans.csv'
 df = pd.read_csv(csvfile)
 
 # Rename columns for clarity
@@ -72,6 +72,7 @@ df.rename(
 # Convert datetime and extract components
 df['datetime'] = pd.to_datetime(df['datetime'], errors='coerce')
 df['year'] = df['datetime'].dt.year
+df['month'] = df['datetime'].dt.month
 df['doys'] = df['datetime'].dt.dayofyear
 df['hour'] = df['datetime'].dt.hour
 df['minute'] = df['datetime'].dt.minute
@@ -85,16 +86,17 @@ print("Daytime images:", len(daytime_df))
 print(f"Removed {len(df) - len(daytime_df)} images taken during night or low-light conditions")
 
 #%% Visualization - Overall green ratio distribution by year
-fig, ax = plt.subplots(figsize=(12, 6))
+fig, ax = plt.subplots(figsize=(8, 6))
 sns.boxplot(data=daytime_df, x='year', y='green_ratio', ax=ax)
 ax.set(xlabel='Year', ylabel='Green Ratio', title='Green Ratio Distribution by Year (Daytime Images Only)')
-plt.savefig('green_ratio_by_year_daytime.png', dpi=300, bbox_inches='tight')
+# plt.savefig('green_ratio_by_year_daytime.png', dpi=300, bbox_inches='tight')
 
 #%% Visualization - Green ratio by image group and year
-fig, ax = plt.subplots(figsize=(12, 6))
+fig, ax = plt.subplots(figsize=(8, 6))
 sns.boxplot(data=daytime_df, x='year', y='green_ratio', hue='imgroup', ax=ax)
 ax.set(xlabel='Year', ylabel='Green Ratio', title='Green Ratio by Image Group and Year (Daytime Images Only)')
-plt.savefig('green_ratio_by_imgroup_year_daytime.png', dpi=300, bbox_inches='tight')
+# plt.savefig('green_ratio_by_imgroup_year_daytime.png', dpi=300, bbox_inches='tight')
+
 #%% Visualization - Green ratio by image group and year
 unique_imgroups = daytime_df['imgroup'].unique()
 fig, axs = plt.subplots(len(unique_imgroups), 1, figsize=(14, 10), sharex=True)
@@ -150,7 +152,13 @@ legend_labels = [label.replace('understory_ratio', 'Understory').replace('birch_
 ax.legend(ax.get_legend_handles_labels()[0], legend_labels)
 
 plt.tight_layout()
-plt.savefig('west_understory_birch_comparison_daytime.png', dpi=300, bbox_inches='tight')
+# plt.savefig('west_understory_birch_comparison_daytime.png', dpi=300, bbox_inches='tight')
+
+# boxplot of understory and birch ratios for west-facing images
+fig, ax = plt.subplots(figsize=(14, 8))
+sns.boxplot(data=west_df_melted, x='year', y='ratio_value', ax=ax, hue='type')
+ax.set(xlabel='Year', ylabel='Green Ratio', title='Understory and Birch Green Ratios - West-facing Images (Daytime Only)')
+plt.tight_layout()
 
 #%% Combined plot of normalized greenness for west-facing images
 fig, ax = plt.subplots(figsize=(14, 8))
@@ -174,10 +182,38 @@ legend_labels = [label.replace('understory_norm', 'Understory').replace('birch_n
 ax.legend(ax.get_legend_handles_labels()[0], legend_labels)
 
 plt.tight_layout()
-plt.savefig('west_norm_comparison_daytime.png', dpi=300, bbox_inches='tight')
+# plt.savefig('west_norm_comparison_daytime.png', dpi=300, bbox_inches='tight')
 
 #%% North-facing images analysis with daytime filter
 north_df = daytime_df[daytime_df['imgroup'].str.contains('North')]
+
+#%% Combined plot of understory and birch ratios for north-facing images
+fig, ax = plt.subplots(figsize=(14, 8))
+
+north_df_melted = north_df.melt(id_vars=['doys', 'year'],
+                             value_vars=['understory_ratio', 'birch_ratio'],
+                             var_name='type', value_name='ratio_value')
+
+sns.lineplot(data=north_df_melted, x='doys', y='ratio_value', hue='year', style='type', ax=ax)
+
+# Customize the plot
+ax.set(xlabel='Day of Year',
+      ylabel='Green Ratio',
+      title='Comparison of Understory and Birch Green Ratios - North-facing Images (Daytime Only)')
+
+# Create a more informative legend
+legend_labels = [label.replace('understory_ratio', 'Understory').replace('birch_ratio', 'Birch') 
+                for label in ax.get_legend_handles_labels()[1]]
+ax.legend(ax.get_legend_handles_labels()[0], legend_labels)
+
+plt.tight_layout()
+# plt.savefig('north_understory_birch_comparison_daytime.png', dpi=300, bbox_inches='tight')
+
+# boxplot of understory and birch ratios for north-facing images
+fig, ax = plt.subplots(figsize=(14, 8))
+sns.boxplot(data=north_df_melted, x='year', y='ratio_value', ax=ax, hue='type')
+ax.set(xlabel='Year', ylabel='Green Ratio', title='Understory and Birch Green Ratios - North-facing Images (Daytime Only)')
+plt.tight_layout()
 
 #%% Plot understory and birch norms for North-facing images
 fig, axs = plt.subplots(2, 1, figsize=(12, 10), sharex=True)
@@ -197,7 +233,7 @@ axs[1].set_xlim(125, 225)  # Focus on growing season
 axs[1].set_ylim(0.3, 0.5)
 
 plt.tight_layout()
-plt.savefig('north_norm_comparison_daytime.png', dpi=300, bbox_inches='tight')
+# plt.savefig('north_norm_comparison_daytime.png', dpi=300, bbox_inches='tight')
 
 #%% Add solar elevation angle to dataset for quality checking
 def get_solar_elevation(row):
@@ -218,17 +254,25 @@ def get_solar_elevation(row):
 sample_df = df.sample(min(1000, len(df)))
 sample_df['solar_elevation'] = sample_df.apply(get_solar_elevation, axis=1)
 
-# Plot relationship between solar elevation and green metrics
-fig, axs = plt.subplots(2, 1, figsize=(12, 10))
-sns.scatterplot(data=sample_df, x='solar_elevation', y='green_ratio', hue='year', ax=axs[0])
-axs[0].set(title='Green Ratio vs Solar Elevation', xlabel='Solar Elevation (degrees)')
-axs[0].axvline(x=5, color='red', linestyle='--', label='Filtering Threshold')
-
-sns.scatterplot(data=sample_df, x='solar_elevation', y='green_norm', hue='year', ax=axs[1])
-axs[1].set(title='Green Norm vs Solar Elevation', xlabel='Solar Elevation (degrees)', 
-          ylabel='Green Norm')
-axs[1].axvline(x=5, color='red', linestyle='--', label='Filtering Threshold')
-
+# Plot relationship between solar elevation and green ratio
+plt.figure(figsize=(12, 6))
+sns.scatterplot(data=sample_df, x='solar_elevation', y='green_ratio', hue='year')
+plt.title('Green Ratio vs Solar Elevation')
+plt.xlabel('Solar Elevation (degrees)')
+plt.ylabel('Green Ratio')
+plt.axvline(x=5, color='red', linestyle='--', label='Filtering Threshold')
+plt.legend(title='Year')
 plt.tight_layout()
-plt.savefig('solar_elevation_effect.png', dpi=300, bbox_inches='tight')
+# plt.savefig('solar_elevation_green_ratio.png', dpi=300, bbox_inches='tight')
+
+# Plot relationship between solar elevation and green norm
+plt.figure(figsize=(12, 6))
+sns.scatterplot(data=sample_df, x='solar_elevation', y='green_norm', hue='year')
+plt.title('Green Norm vs Solar Elevation')
+plt.xlabel('Solar Elevation (degrees)')
+plt.ylabel('Green Norm')
+plt.axvline(x=5, color='red', linestyle='--', label='Filtering Threshold')
+plt.legend(title='Year')
+plt.tight_layout()
+# plt.savefig('solar_elevation_green_norm.png', dpi=300, bbox_inches='tight')
 # %%
