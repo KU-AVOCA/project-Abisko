@@ -1,10 +1,13 @@
 #%%
 import os
+from glob import glob
 import geopandas as gpd
 import rasterio
-from shapely.geometry import box, mapping
+from shapely.geometry import box
 import geemap
 import ee
+import matplotlib.pyplot as plt
+import numpy as np
 
 """
 Script to extract extent from a GeoTIFF (drone orthomosaic), convert to shapefile, 
@@ -117,7 +120,7 @@ def prepS2(img):
     # Preserve original metadata and add satellite identifier
     return ee.Image(img.copyProperties(orig, orig.propertyNames()).set('SATELLITE', 'SENTINEL_2'))
 
-def download_sentinel2(shp_path, start_date, end_date, output_dir, crs):
+def download_sentinel2(shp_path, start_date, end_date, crs,output_dir):
     """
     Download Sentinel-2 imagery for the given ROI with Cloud Score Plus cloud masking.
     
@@ -313,7 +316,7 @@ def download_landsat(shp_path, start_date, end_date, crs, output_dir):
         
         # Format date for filename
         date_acquired = ee.Date(image.get('system:time_start')).format('YYYYMMdd').getInfo()
-        filename = f"landsat_{date_acquired}_{i}.tif"
+        filename = f"Landsat_{date_acquired}_{i}.tif"
         output_path = os.path.join(output_dir, filename)
         
         # Export the image
@@ -368,5 +371,153 @@ print("\nSearching and downloading Landsat imagery...")
 download_landsat(shp_path, start_date, end_date, crs_string, output_dir)
 
 print("\nProcessing complete!")
+
+#%%
+# Visualize downloaded satellite imagery
+def plot_satellite_rgb(imagery_dir, max_images=3, figsize=(15, 10)):
+    """
+    Plot RGB composites of downloaded satellite imagery
+    
+    Parameters:
+        imagery_dir (str): Directory containing the satellite imagery
+        max_images (int): Maximum number of images to display
+        figsize (tuple): Figure size for the plots
+    """
+    # Find all GeoTIFF files in the directory
+    sentinel_files = sorted(glob(os.path.join(imagery_dir, "Sentinel2_*.tif")))
+    landsat_files = sorted(glob(os.path.join(imagery_dir, "Landsat_*.tif")))
+    
+    # Process Sentinel-2 images
+    if sentinel_files:
+        plt.figure(figsize=figsize)
+        plt.suptitle("Sentinel-2 RGB Composites", fontsize=16)
+        
+        for i, file in enumerate(sentinel_files[:max_images]):
+            if i >= max_images:
+                break
+                
+            # Get date from filename
+            date_str = os.path.basename(file).split('_')[1]
+            
+            # For Sentinel-2, we need to find the individual band files 
+            # (if file_per_band=True was used)
+            base_path = os.path.splitext(file)[0]
+            red_path = f"{base_path}_red.tif"
+            green_path = f"{base_path}_green.tif"
+            blue_path = f"{base_path}_blue.tif"
+            
+            # Check if individual band files exist
+            if os.path.exists(red_path) and os.path.exists(green_path) and os.path.exists(blue_path):
+                # Read individual bands
+                with rasterio.open(red_path) as src_r, \
+                     rasterio.open(green_path) as src_g, \
+                     rasterio.open(blue_path) as src_b:
+                    
+                    red = src_r.read(1)
+                    green = src_g.read(1)
+                    blue = src_b.read(1)
+                    
+                    # Stack bands for RGB composite
+                    rgb = np.dstack((red, green, blue))
+                    
+                    # Normalize for display (values were scaled to 0-1 in the download function)
+                    rgb_norm = np.clip(rgb * 3.5, 0, 1)  # Adjust multiplier for brightness
+                    
+                    # Plot
+                    plt.subplot(1, len(sentinel_files[:max_images]), i + 1)
+                    plt.imshow(rgb_norm)
+                    plt.title(f"Sentinel-2 {date_str}")
+                    plt.axis('off')
+            else:
+                # Try to open as a single file with multiple bands
+                try:
+                    with rasterio.open(file) as src:
+                        # Read the first three bands (assuming RGB order)
+                        rgb = np.dstack([src.read(i+1) for i in range(3)])
+                        
+                        # Normalize for display
+                        rgb_norm = np.clip(rgb * 3.5, 0, 1)
+                        
+                        # Plot
+                        plt.subplot(1, len(sentinel_files[:max_images]), i + 1)
+                        plt.imshow(rgb_norm)
+                        plt.title(f"Sentinel-2 {date_str}")
+                        plt.axis('off')
+                except Exception as e:
+                    print(f"Error loading Sentinel-2 image {file}: {e}")
+        
+        plt.tight_layout(rect=[0, 0, 1, 0.95])
+                
+    # Process Landsat images
+    if landsat_files:
+        plt.figure(figsize=figsize)
+        plt.suptitle("Landsat 8/9 RGB Composites", fontsize=16)
+        
+        for i, file in enumerate(landsat_files[:max_images]):
+            if i >= max_images:
+                break
+                
+            # Get date from filename
+            date_str = os.path.basename(file).split('_')[1]
+            
+            # For Landsat, we need to find the individual band files 
+            # (if file_per_band=True was used)
+            base_path = os.path.splitext(file)[0]
+            red_path = f"{base_path}_red.tif"
+            green_path = f"{base_path}_green.tif"
+            blue_path = f"{base_path}_blue.tif"
+            
+            # Check if individual band files exist
+            if os.path.exists(red_path) and os.path.exists(green_path) and os.path.exists(blue_path):
+                # Read individual bands
+                with rasterio.open(red_path) as src_r, \
+                     rasterio.open(green_path) as src_g, \
+                     rasterio.open(blue_path) as src_b:
+                    
+                    red = src_r.read(1)
+                    green = src_g.read(1)
+                    blue = src_b.read(1)
+                    
+                    # Stack bands for RGB composite
+                    rgb = np.dstack((red, green, blue))
+                    
+                    # Normalize for display
+                    rgb_norm = np.clip(rgb * 3.5, 0, 1)  # Adjust multiplier for brightness
+                    
+                    # Plot
+                    plt.subplot(1, len(landsat_files[:max_images]), i + 1)
+                    plt.imshow(rgb_norm)
+                    plt.title(f"Landsat {date_str}")
+                    plt.axis('off')
+            else:
+                # Try to open as a single file with multiple bands
+                try:
+                    with rasterio.open(file) as src:
+                        # Read the first three bands (assuming RGB order)
+                        rgb = np.dstack([src.read(i+1) for i in range(3)])
+                        
+                        # Normalize for display
+                        rgb_norm = np.clip(rgb * 3.5, 0, 1)
+                        
+                        # Plot
+                        plt.subplot(1, len(landsat_files[:max_images]), i + 1)
+                        plt.imshow(rgb_norm)
+                        plt.title(f"Landsat {date_str}")
+                        plt.axis('off')
+                except Exception as e:
+                    print(f"Error loading Landsat image {file}: {e}")
+        
+        plt.tight_layout(rect=[0, 0, 1, 0.95])
+    
+    if not sentinel_files and not landsat_files:
+        print("No satellite imagery found in the specified directory.")
+    
+    plt.show()
+
+# Call the function to visualize the downloaded imagery
+print("\nVisualizing downloaded satellite imagery...")
+satellite_dir = '/mnt/i/SCIENCE-IGN-ALL/AVOCA_Group/2_Shared_folders/4_Student projects/1_Monika_Kathrine/2_Results/1_DroneImagery/satellite/'
+plot_satellite_rgb(satellite_dir)
+
 
 # %%
