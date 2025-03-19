@@ -74,7 +74,7 @@ imfiles.extend(glob.glob(os.path.join(imfolder, '**/', '*.png'), recursive=True)
 imfiles.extend(glob.glob(os.path.join(imfolder, '**/', '*.PNG'), recursive=True))
 print(f"Found {len(imfiles)} images in {imfolder}")
 
-imoutfolder = '/mnt/i/SCIENCE-IGN-ALL/AVOCA_Group/2_Shared_folders/5_Projects/2025Abisko/Tower RGB images/Data_greenessByShunan_' + classification_method
+imoutfolder = '/mnt/i/SCIENCE-IGN-ALL/AVOCA_Group/2_Shared_folders/5_Projects/2025Abisko/Tower RGB images/Data_greenessByShunan_' + classification_method + '_mean'
 if not os.path.exists(imoutfolder):
     os.makedirs(imoutfolder)
 #%%
@@ -84,7 +84,7 @@ if not os.path.exists(results_dir):
     os.makedirs(results_dir)
 
 # Initialize the CSV file with headers
-csv_path = os.path.join(results_dir, 'green_ratio' + classification_method + '.csv')
+csv_path = os.path.join(results_dir, 'green_ratio_' + classification_method + '.csv')
 with open(csv_path, 'w') as f:
     f.write('filename,datetime,green_ratio,green_mean,green_std,green_norm,class1_ratio,class1_mean,class1_std,class1_norm,class2_ratio,class2_mean,class2_std,class2_norm,method\n')
 #%%
@@ -309,7 +309,7 @@ def quantify_vegetation_gmm(img):
         r = r.astype(float)
         
         greenness = g / (r + g + b + 1e-10)
-        threshold = 0.37 # 0.37 +- 0.07
+        threshold = 0.38 # 0.38 +- 0.01
         green_mask = (greenness > threshold).astype(np.uint8) * 255
         
         green_pixels = np.sum(green_mask > 0)
@@ -445,7 +445,7 @@ def quantify_vegetation_dbscan(img):
         b, g, r = cv2.split(img)
         b, g, r = b.astype(float), g.astype(float), r.astype(float)
         greenness = g / (r + g + b + 1e-10)
-        threshold = 0.37 # 0.37 +- 0.07
+        threshold = 0.38 # 0.38 +- 0.01
         green_mask = (greenness > threshold).astype(np.uint8) * 255
         
         green_pixels = np.sum(green_mask > 0)
@@ -613,7 +613,7 @@ def quantify_vegetation_spectral(img):
         b, g, r = cv2.split(img)
         b, g, r = b.astype(float), g.astype(float), r.astype(float)
         greenness = g / (r + g + b + 1e-10)
-        threshold = 0.37 # 0.37 +- 0.07
+        threshold = 0.38 # 0.38 +- 0.01
         green_mask = (greenness > threshold).astype(np.uint8) * 255
         
         green_pixels = np.sum(green_mask > 0)

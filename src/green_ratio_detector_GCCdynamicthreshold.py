@@ -230,60 +230,58 @@ print(f"Done! Results saved to {imoutfolder + 'green_ratio.csv'}")
 df = pd.read_csv(imoutfolder + 'green_ratio.csv')
 df = df.dropna(subset=['threshold', 'green_ratio'])
 # Filter out thresholds <= 0.2 as they likely represent non-vegetation
-# df = df[df['threshold'] > 0.2]
+df = df[df['threshold'] > 0.2]
 sns.boxplot(x='threshold', data=df)
 print(f"the mean threshold is {df['threshold'].mean():.2f}")
 print(f"the median threshold is {df['threshold'].median():.2f}")
 print(f"the std threshold is {df['threshold'].std():.2f}")
 
 #%% remove outliers
-# q1 = df['threshold'].quantile(0.25)
-# q3 = df['threshold'].quantile(0.75)
-# iqr = q3 - q1
-# lower_bound = q1 - 1.5 * iqr
-# upper_bound = q3 + 1.5 * iqr
-# df = df[(df['threshold'] > lower_bound) & (df['threshold'] < upper_bound)]
-# # sns.histplot(df['threshold'], bins=20)
-# print(f"the mean threshold is {df['threshold'].mean():.2f}")
-# print(f"the median threshold is {df['threshold'].median():.2f}")
-# print(f"the std threshold is {df['threshold'].std():.2f}")
+q1 = df['threshold'].quantile(0.25)
+q3 = df['threshold'].quantile(0.75)
+iqr = q3 - q1
+lower_bound = q1 - 1.5 * iqr
+upper_bound = q3 + 1.5 * iqr
+filterted_df = df[(df['threshold'] > lower_bound) & (df['threshold'] < upper_bound)]
+# sns.histplot(df['threshold'], bins=20)
+print(f"the mean threshold is {filterted_df['threshold'].mean():.2f}")
+print(f"the median threshold is {filterted_df['threshold'].median():.2f}")
+print(f"the std threshold is {filterted_df['threshold'].std():.2f}")
 # %% remove outliers using MAD
-# def remove_outliers_mad(df, column='threshold'):
-#     """
-#     Remove outliers using Median Absolute Deviation from scipy.stats - more robust than IQR
-#     """
+def remove_outliers_mad(df, column='threshold'):
+    """
+    Remove outliers using Median Absolute Deviation from scipy.stats - more robust than IQR
+    """
     
-#     median = df[column].median()
-#     # Calculate MAD using scipy.stats
-#     mad = stats.median_abs_deviation(df[column], scale=1)
+    median = df[column].median()
+    # Calculate MAD using scipy.stats
+    mad = stats.median_abs_deviation(df[column], scale=1)
 
-#     q75_scale = 1 / df[column].quantile(0.75)
+    q75_scale = 1 / df[column].quantile(0.75)
     
-#     # Scale factor for normal distribution (1.4826 for normal distribution)
-#     mad_scaled = mad * 1.4826 #q75_scale #
+    # Scale factor for normal distribution (1.4826 for normal distribution)
+    mad_scaled = mad * 1.4826 #q75_scale #
     
-#     # Define bounds
-#     lower_bound = median - mad_scaled
-#     upper_bound = median + mad_scaled
+    # Define bounds
+    lower_bound = median - mad_scaled
+    upper_bound = median + mad_scaled
     
-#     print(f"MAD bounds: {lower_bound:.4f} to {upper_bound:.4f}")
-#     print(f"Q75: {df[column].quantile(0.75)}")
-#     print(f"Q25: {df[column].quantile(0.25)}")
+    print(f"MAD bounds: {lower_bound:.4f} to {upper_bound:.4f}")
+    print(f"Q75: {df[column].quantile(0.75)}")
+    print(f"Q25: {df[column].quantile(0.25)}")
     
-#     # Filter dataframe
-#     filtered_df = df[(df[column] > lower_bound) & (df[column] < upper_bound)]
-#     print(f"Removed {len(df) - len(filtered_df)} outliers using MAD method")
+    # Filter dataframe
+    filtered_df = df[(df[column] > lower_bound) & (df[column] < upper_bound)]
+    print(f"Removed {len(df) - len(filtered_df)} outliers using MAD method")
     
-#     return filtered_df
+    return filtered_df
 
-# # Usage:
-# df_filtered_mad = remove_outliers_mad(df)
-# sns.histplot(df_filtered_mad['threshold'], bins=15, color='green')
-# plt.title('Threshold Distribution after MAD Filtering')
-
-# print(f"Mean threshold (MAD): {df_filtered_mad['threshold'].mean():.2f}")
-# print(f"Median threshold (MAD): {df_filtered_mad['threshold'].median():.2f}")
-# print(f"Std threshold (MAD): {df_filtered_mad['threshold'].std():.2f}")
+# Usage:
+df_filtered_mad = remove_outliers_mad(df)
+sns.boxplot(x='threshold', data=df_filtered_mad)
+print(f"Mean threshold (MAD): {df_filtered_mad['threshold'].mean():.2f}")
+print(f"Median threshold (MAD): {df_filtered_mad['threshold'].median():.2f}")
+print(f"Std threshold (MAD): {df_filtered_mad['threshold'].std():.2f}")
 
 # def remove_outliers_mad(df, column='threshold', threshold_factor=2.5):
 #     """

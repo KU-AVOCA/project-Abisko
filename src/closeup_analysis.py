@@ -8,7 +8,7 @@ import seaborn as sns
 
 sns.set_theme(style="darkgrid", font_scale=1.5)
 #%% Load and process data
-csvfile = '/mnt/i/SCIENCE-IGN-ALL/AVOCA_Group/2_Shared_folders/5_Projects/2025Abisko/closeup_green_ratio_mean/green_ratio.csv'
+csvfile = '/mnt/i/SCIENCE-IGN-ALL/AVOCA_Group/2_Shared_folders/5_Projects/2025Abisko/closeup_green_ratio_stdminus/green_ratio.csv'
 df = pd.read_csv(csvfile)
 df['imname'] = df.filename.str.split('/').str[-1]
 # Replace spaces with underscores in image names

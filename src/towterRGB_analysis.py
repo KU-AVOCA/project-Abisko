@@ -51,7 +51,7 @@ def is_daytime(row, min_elevation=5.0):
         return False
 
 #%% Load and process data
-csvfile = '/mnt/i/SCIENCE-IGN-ALL/AVOCA_Group/1_Personal_folders/1_Simon/1_Abisko/6_Tower_Data/Tower RGB images/1_Data_greenessByShunan_kmeans_36/results/green_ratio_kmeans.csv'
+csvfile = '/mnt/i/SCIENCE-IGN-ALL/AVOCA_Group/2_Shared_folders/5_Projects/2025Abisko/Tower RGB images/Data_greenessByShunan_kmeans_mean/results/green_ratiokmeans.csv'
 df = pd.read_csv(csvfile)
 
 # Rename columns for clarity

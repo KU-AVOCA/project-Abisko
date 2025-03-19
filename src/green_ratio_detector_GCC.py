@@ -82,7 +82,7 @@ def quantify_vegetation(img):
         greenness = g / (r + g + b + 1e-10) #  
 
         # Create a binary mask using a threshold (adjust as needed)
-        threshold = 0.37 # 0.37 +- 0.07
+        threshold = 0.38 # 0.37 +- 0.07
         green_mask = (greenness > threshold).astype(np.uint8) * 255
         
         # Count green pixels and calculate ratio
