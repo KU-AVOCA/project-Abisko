@@ -1,3 +1,18 @@
+"""
+Script to extract extent from a GeoTIFF (drone orthomosaic), convert to shapefile, 
+and download matching Landsat and Sentinel-2 imagery from Google Earth Engine for the ROI.
+Cloud masking is applied using Cloud Score Plus (for Sentinel-2) and QA bands (for Landsat).
+Bands are renamed to standardized names (blue, green, red, etc.) for easier processing.
+Downloaded satellite imagery is visualized as RGB composites and saved as PNG files.
+
+Functions:
+- tiff_to_shapefile: Extracts boundary from GeoTIFF and creates shapefile
+- mask/rename/prep functions: Process Sentinel-2 and Landsat imagery to remove clouds
+- download_sentinel2/download_landsat: Download imagery for a given ROI and date range
+- plot_satellite_rgb: Creates and saves RGB visualizations of downloaded imagery
+
+Shunan Feng (shf@ign.ku.dk)
+"""
 #%%
 import os
 from glob import glob
@@ -8,15 +23,12 @@ import geemap
 import ee
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
+import seaborn as sns
+import cmocean
 
-"""
-Script to extract extent from a GeoTIFF (drone orthomosaic), convert to shapefile, 
-and download matching Landsat and Sentinel-2 imagery from Google Earth Engine for the ROI.
-Cloud masking is applied using Cloud Score Plus (for Sentinel-2) and QA bands (for Landsat).
-Bands are renamed to standardized names (blue, green, red, etc.) for easier processing.
-"""
-
-
+sns.set_theme(style="whitegrid", font_scale=1.5)
+#%%
 def tiff_to_shapefile(tiff_path, output_shp):
     """
     Extract the extent of a GeoTIFF file and create a shapefile boundary.
@@ -212,7 +224,7 @@ def maskL8sr(image):
     qaMask = image.select('QA_PIXEL').bitwiseAnd(int('11111', 2)).eq(0)
     saturationMask = image.select('QA_RADSAT').eq(0)  # Mask saturated pixels
     
-    # Apply scaling factors to convert DN to reflectance
+    # Apply scaling factors to convert DN to reflectance or temperature 
     opticalBands = image.select('SR_B.').multiply(0.0000275).add(-0.2).updateMask(qaMask).updateMask(saturationMask)
     thermalBands = image.select('ST_B.*').multiply(0.00341802).add(149.0).updateMask(qaMask).updateMask(saturationMask)
 
@@ -374,7 +386,7 @@ print("\nProcessing complete!")
 
 #%%
 # Visualize downloaded satellite imagery
-def plot_satellite_rgb(imagery_dir, max_images=3, figsize=(15, 10)):
+def plot_satellite_rgb(imagery_dir, figsize=(15, 10)):
     """
     Plot RGB composites of downloaded satellite imagery
     
@@ -386,133 +398,101 @@ def plot_satellite_rgb(imagery_dir, max_images=3, figsize=(15, 10)):
     # Find all GeoTIFF files in the directory
     sentinel_files = sorted(glob(os.path.join(imagery_dir, "Sentinel2_*.tif")))
     landsat_files = sorted(glob(os.path.join(imagery_dir, "Landsat_*.tif")))
+
+    df_sentinel = pd.DataFrame(sentinel_files, columns=['imfilepath'])
+    df_sentinel['filename'] = df_sentinel['imfilepath'].apply(os.path.basename)
+    df_sentinel['imuid'] = df_sentinel['filename'].str.split('.').str[0]
+    df_sentinel['imdate'] = pd.to_datetime(df_sentinel['filename'].str.split('_').str[1], format='%Y%m%d')
+    df_sentinel['bandname'] = df_sentinel['filename'].str.split('.').str[1]
+    df_sentinel = df_sentinel[df_sentinel['bandname'].isin(['red', 'green', 'blue'])]
+    
+    df_landsat = pd.DataFrame(landsat_files, columns=['imfilepath'])
+    df_landsat['filename'] = df_landsat['imfilepath'].apply(os.path.basename)
+    df_landsat['imuid'] = df_landsat['filename'].str.split('.').str[0]
+    df_landsat['imdate'] = pd.to_datetime(df_landsat['filename'].str.split('_').str[1], format='%Y%m%d') 
+    df_landsat['bandname'] = df_landsat['filename'].str.split('.').str[1]
+    df_landsat = df_landsat[df_landsat['bandname'].isin(['red', 'green', 'blue', 'thermal1'])]
     
     # Process Sentinel-2 images
     if sentinel_files:
-        plt.figure(figsize=figsize)
-        plt.suptitle("Sentinel-2 RGB Composites", fontsize=16)
-        
-        for i, file in enumerate(sentinel_files[:max_images]):
-            if i >= max_images:
-                break
-                
-            # Get date from filename
-            date_str = os.path.basename(file).split('_')[1]
+        unique_images = df_sentinel['imuid'].unique()
+        for i in unique_images:
+
+            print(f"Processing Sentinel-2 image: {i}")
+            red_path = df_sentinel[(df_sentinel['imuid'] == i) & (df_sentinel['bandname'] == 'red')]['imfilepath'].values[0]
+            green_path = df_sentinel[(df_sentinel['imuid'] == i) & (df_sentinel['bandname'] == 'green')]['imfilepath'].values[0]
+            blue_path = df_sentinel[(df_sentinel['imuid'] == i) & (df_sentinel['bandname'] == 'blue')]['imfilepath'].values[0]
+            with rasterio.open(red_path) as src_r, \
+                 rasterio.open(green_path) as src_g, \
+                 rasterio.open(blue_path) as src_b:
+
+                red = src_r.read(1)
+                green = src_g.read(1)
+                blue = src_b.read(1)
+
+                # Stack bands for RGB composite
+                rgb = np.dstack((red, green, blue))
+
+                # Normalize for display
+                rgb_norm = np.clip(rgb * 3.5, 0, 1)
+
+            fig, ax = plt.subplots(figsize=figsize)
+            plt.imshow(rgb_norm)
+            plt.axis('off')
+            ax.set(title=f"Sentinel-2 RGB Composite: {i}")
+            plt.show()
+            fig.savefig(f"{imagery_dir}/{i}_RGB.png", bbox_inches='tight', dpi=300)
+            plt.close(fig)
             
-            # For Sentinel-2, we need to find the individual band files 
-            # (if file_per_band=True was used)
-            base_path = os.path.splitext(file)[0]
-            red_path = f"{base_path}_red.tif"
-            green_path = f"{base_path}_green.tif"
-            blue_path = f"{base_path}_blue.tif"
             
-            # Check if individual band files exist
-            if os.path.exists(red_path) and os.path.exists(green_path) and os.path.exists(blue_path):
-                # Read individual bands
-                with rasterio.open(red_path) as src_r, \
-                     rasterio.open(green_path) as src_g, \
-                     rasterio.open(blue_path) as src_b:
-                    
-                    red = src_r.read(1)
-                    green = src_g.read(1)
-                    blue = src_b.read(1)
-                    
-                    # Stack bands for RGB composite
-                    rgb = np.dstack((red, green, blue))
-                    
-                    # Normalize for display (values were scaled to 0-1 in the download function)
-                    rgb_norm = np.clip(rgb * 3.5, 0, 1)  # Adjust multiplier for brightness
-                    
-                    # Plot
-                    plt.subplot(1, len(sentinel_files[:max_images]), i + 1)
-                    plt.imshow(rgb_norm)
-                    plt.title(f"Sentinel-2 {date_str}")
-                    plt.axis('off')
-            else:
-                # Try to open as a single file with multiple bands
-                try:
-                    with rasterio.open(file) as src:
-                        # Read the first three bands (assuming RGB order)
-                        rgb = np.dstack([src.read(i+1) for i in range(3)])
-                        
-                        # Normalize for display
-                        rgb_norm = np.clip(rgb * 3.5, 0, 1)
-                        
-                        # Plot
-                        plt.subplot(1, len(sentinel_files[:max_images]), i + 1)
-                        plt.imshow(rgb_norm)
-                        plt.title(f"Sentinel-2 {date_str}")
-                        plt.axis('off')
-                except Exception as e:
-                    print(f"Error loading Sentinel-2 image {file}: {e}")
-        
-        plt.tight_layout(rect=[0, 0, 1, 0.95])
                 
     # Process Landsat images
     if landsat_files:
-        plt.figure(figsize=figsize)
-        plt.suptitle("Landsat 8/9 RGB Composites", fontsize=16)
-        
-        for i, file in enumerate(landsat_files[:max_images]):
-            if i >= max_images:
-                break
-                
-            # Get date from filename
-            date_str = os.path.basename(file).split('_')[1]
-            
-            # For Landsat, we need to find the individual band files 
-            # (if file_per_band=True was used)
-            base_path = os.path.splitext(file)[0]
-            red_path = f"{base_path}_red.tif"
-            green_path = f"{base_path}_green.tif"
-            blue_path = f"{base_path}_blue.tif"
-            
-            # Check if individual band files exist
-            if os.path.exists(red_path) and os.path.exists(green_path) and os.path.exists(blue_path):
-                # Read individual bands
-                with rasterio.open(red_path) as src_r, \
-                     rasterio.open(green_path) as src_g, \
-                     rasterio.open(blue_path) as src_b:
-                    
-                    red = src_r.read(1)
-                    green = src_g.read(1)
-                    blue = src_b.read(1)
-                    
-                    # Stack bands for RGB composite
-                    rgb = np.dstack((red, green, blue))
-                    
-                    # Normalize for display
-                    rgb_norm = np.clip(rgb * 3.5, 0, 1)  # Adjust multiplier for brightness
-                    
-                    # Plot
-                    plt.subplot(1, len(landsat_files[:max_images]), i + 1)
-                    plt.imshow(rgb_norm)
-                    plt.title(f"Landsat {date_str}")
-                    plt.axis('off')
-            else:
-                # Try to open as a single file with multiple bands
-                try:
-                    with rasterio.open(file) as src:
-                        # Read the first three bands (assuming RGB order)
-                        rgb = np.dstack([src.read(i+1) for i in range(3)])
-                        
-                        # Normalize for display
-                        rgb_norm = np.clip(rgb * 3.5, 0, 1)
-                        
-                        # Plot
-                        plt.subplot(1, len(landsat_files[:max_images]), i + 1)
-                        plt.imshow(rgb_norm)
-                        plt.title(f"Landsat {date_str}")
-                        plt.axis('off')
-                except Exception as e:
-                    print(f"Error loading Landsat image {file}: {e}")
-        
-        plt.tight_layout(rect=[0, 0, 1, 0.95])
+        unique_images = df_landsat['imuid'].unique()
+        for i in unique_images:
+
+            print(f"Processing Landsat image: {i}")
+            red_path = df_landsat[(df_landsat['imuid'] == i) & (df_landsat['bandname'] == 'red')]['imfilepath'].values[0]
+            green_path = df_landsat[(df_landsat['imuid'] == i) & (df_landsat['bandname'] == 'green')]['imfilepath'].values[0]
+            blue_path = df_landsat[(df_landsat['imuid'] == i) & (df_landsat['bandname'] == 'blue')]['imfilepath'].values[0]
+            thermal_path = df_landsat[(df_landsat['imuid'] == i) & (df_landsat['bandname'] == 'thermal1')]['imfilepath'].values[0]
+            with rasterio.open(red_path) as src_r, \
+                 rasterio.open(green_path) as src_g, \
+                 rasterio.open(blue_path) as src_b:
+
+                red = src_r.read(1)
+                green = src_g.read(1)
+                blue = src_b.read(1)
+
+                # Stack bands for RGB composite
+                rgb = np.dstack((red, green, blue))
+
+                # Normalize for display
+                rgb_norm = np.clip(rgb * 3.5, 0, 1)
+
+            fig1, ax1 = plt.subplots(figsize=figsize)
+            plt.imshow(rgb_norm)
+            plt.axis('off')
+            ax1.set(title=f"Landsat RGB Composite: {i}")
+            plt.show()
+            fig1.savefig(f"{imagery_dir}/{i}_RGB.png", bbox_inches='tight', dpi=300)
+            plt.close(fig1)
+
+            with rasterio.open(thermal_path) as src_t:
+                thermal = src_t.read(1) #- 273.15  # Convert from Kelvin to Celsius
+
+            fig2, ax2 = plt.subplots(figsize=figsize)
+            plt.imshow(thermal, cmap=cmocean.cm.thermal)
+            plt.axis('off')
+            ax2.set(title=f"Landsat Thermal: {i}")
+            cbar = plt.colorbar(ax=ax2, orientation='vertical', shrink=0.8)
+            cbar.set_label('Temperature (°C)')
+            fig2.savefig(f"{imagery_dir}/{i}_Thermal.png", bbox_inches='tight', dpi=300)
+            plt.close(fig2)
     
     if not sentinel_files and not landsat_files:
         print("No satellite imagery found in the specified directory.")
     
-    plt.show()
 
 # Call the function to visualize the downloaded imagery
 print("\nVisualizing downloaded satellite imagery...")
