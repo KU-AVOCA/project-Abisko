@@ -105,7 +105,7 @@ print("Total images before filtering:", len(df))
 df['is_daytime'] = df.apply(is_daytime, axis=1)
 daytime_df = df[df['is_daytime']]
 # remove images taken after 2023-08-17 in west-facing camera due to overexposure
-daytime_df = daytime_df[~((daytime_df['datetime'] > pd.to_datetime(2023, 8, 17)) & (daytime_df['imgroup'].str.contains('West')))]
+daytime_df = daytime_df[~((daytime_df['datetime'] > pd.to_datetime("2023-08-17")) & (daytime_df['imgroup'].str.contains('West')))]
 print("Daytime images:", len(daytime_df))
 print(f"Removed {len(df) - len(daytime_df)} images taken during night or low-light conditions")
 
