@@ -46,18 +46,26 @@ def process_altum_orthomosaic(input_path, output_dir=None):
         # Setup output profiles
         ms_profile = profile.copy()
         ms_profile.update({
-            'count': band_count - 1,  # Exclude thermal band
-            'dtype': 'float32',
-            'nodata': np.nan,
-            'BIGTIFF': 'YES'  
+        'count': band_count - 1,  # Exclude thermal band
+        'dtype': 'float32',
+        'nodata': np.nan,
+        'BIGTIFF': 'YES',
+        'tiled': True,
+        'blockxsize': 256,  # Tile width (power of 2)
+        'blockysize': 256,   # Tile height (power of 2)
+        # 'interleave': 'band'     # Can improve access speed for specific use cases
         })
         
         thermal_profile = profile.copy()
         thermal_profile.update({
-            'count': 1,
-            'dtype': 'float32',
-            'nodata': np.nan,
-            'BIGTIFF': 'YES'  
+        'count': 1,
+        'dtype': 'float32',
+        'nodata': np.nan,
+        'BIGTIFF': 'YES',
+        'tiled': True,
+        'blockxsize': 256,
+        'blockysize': 256,
+        # 'interleave': 'band'     # Can improve access speed for specific use cases
         })
         
         # Define chunk size for efficient processing
@@ -265,8 +273,8 @@ def visualize_results(ms_path, thermal_path, downsample_factor):
 
 #%% Example usage
 if __name__ == "__main__":
-    input_image = "/mnt/i/SCIENCE-IGN-ALL/AVOCA_Group/2_Shared_folders/4_Student projects/1_Monika_Kathrine/2_Results/1_DroneImagery/orthomosaic/20230608_orthomosaic32022.tif"  # Replace with your file path
-    output_directory = "/mnt/i/SCIENCE-IGN-ALL/AVOCA_Group/2_Shared_folders/4_Student projects/1_Monika_Kathrine/2_Results/1_DroneImagery/postprocessed"  # Optional, replace with your preferred output directory
+    input_image = "/mnt/i/SCIENCE-IGN-ALL/AVOCA_Group/1_Personal_folders/3_Shunan/data/studentdebug/23_06_08_orthomosaic_georef.tif"  # Replace with your file path
+    output_directory = "/mnt/i/SCIENCE-IGN-ALL/AVOCA_Group/1_Personal_folders/3_Shunan/data/studentdebug/"  # Optional, replace with your preferred output directory
     
     # Process the image
     ms_output, thermal_output = process_altum_orthomosaic(input_image, output_directory)
@@ -274,6 +282,6 @@ if __name__ == "__main__":
     # thermal_output = "/mnt/i/SCIENCE-IGN-ALL/AVOCA_Group/2_Shared_folders/4_Student projects/1_Monika_Kathrine/2_Results/1_DroneImagery/postprocessed/20230608_orthomosaic32022_thermal_celsius.tif"
     
     # Visualize the results
-    visualize_results(ms_output, thermal_output, downsample_factor=0.1)
+    # visualize_results(ms_output, thermal_output, downsample_factor=0.1)
 # %%
 
