@@ -1,14 +1,34 @@
+'''
+Closeup Green Ratio Analysis Script
+
+This script analyzes green ratio data derived from closeup images taken in Abisko.
+It processes image data from a CSV file containing green ratio measurements of vegetation
+from different locations (groups) over different years.
+
+The script:
+1. Loads green ratio data from CSV file
+2. Extracts datetime, year, day of year, and group information from image filenames
+3. Creates time series plots comparing green ratio across different groups for 2022 and 2023
+4. Generates a boxplot comparing green ratio by day of year across different years
+
+Input:
+    - CSV file with green ratio data derived from closeup images
+    - Expected filename format: "DD-MM-YYYY_GROUP.JPG" (e.g., "07-07-2022_E2.JPG")
+    
+Output:
+    - Time series plots showing green ratio trends for different groups in 2022 and 2023
+    - Boxplot comparing green ratio by day of year across years
+
+Shunan Feng (shf@ign.ku.dk)
+'''
 #%%
-import os
 import pandas as pd
-import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-# from datetime import datetime, timedelta
 
 sns.set_theme(style="darkgrid", font_scale=1.5)
 #%% Load and process data
-csvfile = '/mnt/i/SCIENCE-IGN-ALL/AVOCA_Group/2_Shared_folders/5_Projects/2025Abisko/closeup_green_ratio_stdminus/green_ratio.csv'
+csvfile = '/mnt/i/SCIENCE-IGN-ALL/AVOCA_Group/2_Shared_folders/5_Projects/2025Abisko/closeup_green_ratio_stdmean/green_ratio.csv'
 df = pd.read_csv(csvfile)
 df['imname'] = df.filename.str.split('/').str[-1]
 # Replace spaces with underscores in image names

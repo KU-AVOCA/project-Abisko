@@ -1,13 +1,35 @@
+'''
+Tower RGB Image Analysis Script
+This script analyzes tower-mounted camera images from a research site in Abisko, 
+focusing on the greenness of vegetation. It processes time series data from RGB images
+that have been pre-classified into understory and birch canopy components using k-means clustering.
+Key features:
+- Filters images by daylight hours using solar elevation calculations with pvlib
+- Processes and visualizes changes in vegetation greenness over multiple years
+- Separately analyzes understory and birch canopy dynamics
+- Compares different view angles (North-facing vs West-facing cameras)
+- Examines relationships between light conditions and greenness metrics
+The script uses data from a CSV file containing:
+- Image metadata (filenames, timestamps, image groups)
+- K-means clustering results for two vegetation classes
+- Greenness metrics (ratios, means, standard deviations, normalized values)
+Visualization includes:
+- Box plots showing annual variability
+- Time series plots of seasonal greenness patterns by year
+- Comparisons between understory and canopy greenness
+- Quality control analysis of solar elevation effects
+
+Author: Shunan Feng (shf@ign.ku.dk)
+'''
 #%%
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
 import seaborn as sns
 import pvlib
-# from datetime import datetime, timedelta
 
 sns.set_theme(style="darkgrid", font_scale=1.5)
-
 #%% Define Abisko coordinates
 SITE_LATITUDE = 68.34808742 # in decimal degrees 
 SITE_LONGITUDE = 19.05077561 # in decimal degrees
@@ -51,7 +73,7 @@ def is_daytime(row, min_elevation=5.0):
         return False
 
 #%% Load and process data
-csvfile = '/mnt/i/SCIENCE-IGN-ALL/AVOCA_Group/2_Shared_folders/5_Projects/2025Abisko/Tower RGB images/Data_greenessByShunan_kmeans_mean/results/green_ratiokmeans.csv'
+csvfile = '/mnt/i/SCIENCE-IGN-ALL/AVOCA_Group/2_Shared_folders/5_Projects/2025Abisko/Tower RGB images/Data_greenessByShunan_kmeans_mean/results/green_ratio_kmeans.csv'
 df = pd.read_csv(csvfile)
 
 # Rename columns for clarity
@@ -82,8 +104,24 @@ df['imgroup'] = df['filename'].str.split('/').str[-3]
 print("Total images before filtering:", len(df))
 df['is_daytime'] = df.apply(is_daytime, axis=1)
 daytime_df = df[df['is_daytime']]
+# remove images taken after 2023-08-17 in west-facing camera due to overexposure
+daytime_df = daytime_df[~((daytime_df['datetime'] > pd.to_datetime(2023, 8, 17)) & (daytime_df['imgroup'].str.contains('West')))]
 print("Daytime images:", len(daytime_df))
 print(f"Removed {len(df) - len(daytime_df)} images taken during night or low-light conditions")
+
+# daytime_df = df
+# # Replace values with NaN for nighttime images
+# columns_to_replace = [
+#     'green_ratio', 'green_mean', 'green_std', 'green_norm',
+#     'understory_ratio', 'understory_mean', 'understory_std', 'understory_norm',
+#     'birch_ratio', 'birch_mean', 'birch_std', 'birch_norm'
+# ]
+
+# for col in columns_to_replace:
+#     if col in daytime_df.columns:
+#         daytime_df.loc[~df['is_daytime'], col] = np.nan
+# print("Daytime images:", len(daytime_df))
+# print(f"Removed {len(df) - len(daytime_df)} images taken during night or low-light conditions")
 
 #%% Visualization - Overall green ratio distribution by year
 fig, ax = plt.subplots(figsize=(8, 6))
@@ -101,33 +139,50 @@ ax.set(xlabel='Year', ylabel='Green Ratio', title='Green Ratio by Image Group an
 unique_imgroups = daytime_df['imgroup'].unique()
 fig, axs = plt.subplots(len(unique_imgroups), 1, figsize=(14, 10), sharex=True)
 
-# Plot data for each imgroup in separate subplots
-handles, labels = None, None
+# Create a dictionary to track all unique years across all groups
+all_years = {}
+colors = sns.color_palette("deep")
 
+# First, identify all unique years and assign consistent colors
+for imgroup in unique_imgroups:
+    group_data = daytime_df[daytime_df['imgroup'] == imgroup]
+    years = group_data['year'].unique()
+    for year in years:
+        if year not in all_years:
+            all_years[year] = colors[len(all_years) % len(colors)]
+
+# Plot data for each imgroup in separate subplots
 for i, imgroup in enumerate(unique_imgroups):
     group_data = daytime_df[daytime_df['imgroup'] == imgroup]
-    g = sns.lineplot(data=group_data, x='doys', y='green_ratio', hue='year', ax=axs[i])
+    ax = axs[i]
     
-    # Store handles and labels from the first plot to use for the shared legend
-    if i == 0:
-        handles, labels = axs[i].get_legend_handles_labels()
+    # Plot each year separately with consistent colors
+    for year in sorted(group_data['year'].unique()):
+        year_data = group_data[group_data['year'] == year]
+        sns.lineplot(data=year_data, x='doys', y='green_ratio', ax=ax, color=all_years[year], label=year)
     
     # Remove individual legends
-    axs[i].get_legend().remove()
+    if ax.get_legend():
+        ax.get_legend().remove()
     
-    axs[i].set_ylabel('Green Ratio')
-    axs[i].set_title(f'Green Ratio Over Time - {imgroup} (Daytime Only)')
+    ax.set_ylabel('Green Ratio')
+    ax.set_title(f'Green Ratio Over Time - {imgroup} (Daytime Only)')
     
     # Only set xlabel for the bottom subplot
     if i == len(unique_imgroups) - 1:
-        axs[i].set_xlabel('Day of Year')
+        ax.set_xlabel('Day of Year')
     else:
-        axs[i].set_xlabel('')
+        ax.set_xlabel('')
 
-# Add a single legend for all subplots
-fig.legend(handles, labels, title="Year", loc='upper right', bbox_to_anchor=(1.15, 0.9))
+# Create custom legend handles
+legend_elements = [Line2D([0], [0], color=color, linestyle='-', 
+                          label=str(year)) 
+                  for year, color in sorted(all_years.items())]
+
+# Add a single legend for all subplots with the consistent colors
+fig.legend(handles=legend_elements, title="Year", loc='upper right', bbox_to_anchor=(1.15, 0.9))
 plt.tight_layout()
-plt.savefig('green_ratio_by_imgroup_daytime.png', dpi=300, bbox_inches='tight')
+# plt.savefig('green_ratio_by_imgroup_daytime.png', dpi=300, bbox_inches='tight')
 
 #%% West-facing images analysis
 west_df = daytime_df[daytime_df['imgroup'].str.contains('West')]
@@ -139,7 +194,7 @@ west_df_melted = west_df.melt(id_vars=['doys', 'year'],
                              value_vars=['understory_ratio', 'birch_ratio'],
                              var_name='type', value_name='ratio_value')
 
-sns.lineplot(data=west_df_melted, x='doys', y='ratio_value', hue='year', style='type', ax=ax)
+sns.lineplot(data=west_df_melted, x='doys', y='ratio_value', hue='year', style='type', ax=ax, palette=sns.color_palette("deep"))
 
 # Customize the plot
 ax.set(xlabel='Day of Year',
@@ -194,7 +249,7 @@ north_df_melted = north_df.melt(id_vars=['doys', 'year'],
                              value_vars=['understory_ratio', 'birch_ratio'],
                              var_name='type', value_name='ratio_value')
 
-sns.lineplot(data=north_df_melted, x='doys', y='ratio_value', hue='year', style='type', ax=ax)
+sns.lineplot(data=north_df_melted, x='doys', y='ratio_value', hue='year', style='type', ax=ax, palette=sns.color_palette("deep"))
 
 # Customize the plot
 ax.set(xlabel='Day of Year',

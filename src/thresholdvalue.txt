@@ -1,3 +1,0 @@
-the mean threshold is 0.37
-the median threshold is 0.38
-the std threshold is 0.07
