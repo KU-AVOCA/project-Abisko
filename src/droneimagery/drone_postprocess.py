@@ -53,7 +53,9 @@ def process_altum_orthomosaic(input_path, output_dir=None):
         'tiled': True,
         'blockxsize': 256,  # Tile width (power of 2)
         'blockysize': 256,   # Tile height (power of 2)
-        # 'interleave': 'band'     # Can improve access speed for specific use cases
+        'interleave': 'band',    
+        'compress': 'lzw',  
+        'Predictor': 3      # Optional: Use floating point prediction for better compression
         })
         
         thermal_profile = profile.copy()
@@ -65,7 +67,9 @@ def process_altum_orthomosaic(input_path, output_dir=None):
         'tiled': True,
         'blockxsize': 256,
         'blockysize': 256,
-        # 'interleave': 'band'     # Can improve access speed for specific use cases
+        'interleave': 'band',    
+        'compress': 'lzw', 
+        'Predictor': 3     
         })
         
         # Define chunk size for efficient processing
@@ -273,7 +277,7 @@ def visualize_results(ms_path, thermal_path, downsample_factor):
 
 #%% Example usage
 if __name__ == "__main__":
-    input_image = "/mnt/i/SCIENCE-IGN-ALL/AVOCA_Group/1_Personal_folders/3_Shunan/data/studentdebug/23_06_08_orthomosaic_georef.tif"  # Replace with your file path
+    input_image = "/mnt/i/SCIENCE-IGN-ALL/AVOCA_Group/1_Personal_folders/3_Shunan/data/studentdebug/20230608_orthomosaic32022.tif"  # Replace with your file path
     output_directory = "/mnt/i/SCIENCE-IGN-ALL/AVOCA_Group/1_Personal_folders/3_Shunan/data/studentdebug/"  # Optional, replace with your preferred output directory
     
     # Process the image
