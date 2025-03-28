@@ -17,7 +17,6 @@ Author: Shunan Feng (shf@ign.ku.dk)
 
 import os
 import glob
-import argparse
 import numpy as np
 import pandas as pd
 import rasterio
@@ -26,20 +25,21 @@ from scipy.stats import entropy
 from tqdm import tqdm
 
 from skimage.feature import graycomatrix, graycoprops
-from skimage.measure import find_contours
+# from skimage.measure import find_contours
 
 import matplotlib.pyplot as plt
-from matplotlib_scalebar.scalebar import ScaleBar
+# from matplotlib_scalebar.scalebar import ScaleBar
 from rasterio.plot import plotting_extent
 import cmocean
 import seaborn as sns
+from skimage.feature import graycomatrix, graycoprops
 
 # Set plotting style
 sns.set_theme(style="whitegrid", font_scale=1.5)
 
 #%%
 
-def calculate_index(image_path, index_name, imoutput_dir=None):
+def func_calculate_index(image_path, index_name, imoutput_dir=None):
     """
     Calculate a specific index from input tif image.
     ALTUM sensor has 5 bands:
@@ -61,7 +61,8 @@ def calculate_index(image_path, index_name, imoutput_dir=None):
     """
 
     if imoutput_dir is None:
-        imoutput_dir = os.path.dirname(image_path)
+        imoutput_dir = os.path.join(os.path.dirname(image_path), index_name)
+        os.makedirs(imoutput_dir, exist_ok=True)
     
     if index_name == 'NDVI':# Normalized Difference Vegetation Index
         with rasterio.open(image_path) as src:
@@ -85,12 +86,12 @@ def calculate_index(image_path, index_name, imoutput_dir=None):
             band_nir = src.read(5)
             index = (band_nir - band_green) / (band_nir + band_green)
 
-    elif index_name == 'SLAVI':# Specific Leaf Area Vegetation Index
-        with rasterio.open(image_path) as src:
+    # elif index_name == 'SLAVI':# Specific Leaf Area Vegetation Index
+    #     with rasterio.open(image_path) as src:
             
-            band_red = src.read(3)
-            band_nir = src.read(5)
-            index = band_nir / (band_nir + band_red)
+    #         band_red = src.read(3)
+    #         band_nir = src.read(5)
+    #         index = band_nir / (band_nir + band_red)
 
     elif index_name == 'GLI':# Green Leaf Index
         with rasterio.open(image_path) as src:
@@ -109,6 +110,23 @@ def calculate_index(image_path, index_name, imoutput_dir=None):
             band_red = src.read(3)
 
             index = band_green / (band_green + band_blue + band_red)
+
+    # for single bands:
+    elif index_name == 'band1' or index_name == 'blue':
+        with rasterio.open(image_path) as src:
+            index = src.read(1)
+    elif index_name == 'band2' or index_name == 'green':
+        with rasterio.open(image_path) as src:
+            index = src.read(2)
+    elif index_name == 'band3' or index_name == 'red':
+        with rasterio.open(image_path) as src:
+            index = src.read(3)
+    elif index_name == 'band4' or index_name == 'red_edge':
+        with rasterio.open(image_path) as src:
+            index = src.read(4)
+    elif index_name == 'band5' or index_name == 'nir':
+        with rasterio.open(image_path) as src:
+            index = src.read(5)
         
     else:
         raise ValueError(f"Index '{index_name}' not supported.")
@@ -119,17 +137,20 @@ def calculate_index(image_path, index_name, imoutput_dir=None):
         
         # ax.set_title(f'{index_name} Index')
         extent = plotting_extent(src)
-        plt.imshow(index, cmap=cmocean.cm.balance, extent=extent, ax=ax)
-        scalebar = ScaleBar(
-            src.transform[0], 
-            location='lower right', 
-            units='m', 
-            dimension='si-length',
-            scale_loc='bottom', 
-            length_fraction=0.1
-        )
-        ax.add_artist(scalebar)
-        
+        ax.imshow(index, cmap=cmocean.cm.algae, extent=extent)
+        # scalebar = ScaleBar(
+        #     src.transform[0], 
+        #     location='lower right', 
+        #     units='m', 
+        #     dimension='si-length',
+        #     scale_loc='bottom', 
+        #     length_fraction=0.1
+        # )
+        # ax.add_artist(scalebar)
+        # Add colorbar
+        cbar = plt.colorbar(ax.images[0], ax=ax, orientation='vertical', 
+                           fraction=0.046, pad=0.04)
+        cbar.set_label(f'{index_name}')
         # Add metadata as text
         metadata_text = (
             f"Index: {index_name}\n"
@@ -144,372 +165,251 @@ def calculate_index(image_path, index_name, imoutput_dir=None):
         plt.tight_layout()
 
         # Save the plot
-        output_dir = os.path.dirname(image_path)
-        output_path_png = os.path.join(output_dir, f"{os.path.basename(image_path).replace('.tif', '')}_{index_name}.png")
+        output_path_png = os.path.join(imoutput_dir, f"{os.path.basename(image_path).replace('.tif', '')}_{index_name}.png")
+        fig.savefig(output_path_png, dpi=300)
+        output_path_pdf = os.path.join(imoutput_dir, f"{os.path.basename(image_path).replace('.tif', '')}_{index_name}.pdf")
+        fig.savefig(output_path_pdf, dpi=300)
+        plt.close()
+        print(f"Index visualization (png) saved to: {output_path_png}")
+        print(f"Index visualization (pdf) saved to: {output_path_pdf}")
 
     
     return index
 
-def analyze_homogeneity(image_path, band_indices='NDVI', output_dir=None):
+
+
+def calculate_and_analyze_index_directly(image_path, index_name, output_dir=None):
     """
-    Analyze the spatial homogeneity of a single image.
+    Calculate a vegetation index and directly analyze its spatial homogeneity without saving as GeoTIFF.
     
     Parameters:
-        image_path (str): Path to GeoTIFF file
-        band_indices (list): List of band indices to analyze (default=NDVI)
-        output_dir (str): Directory to save results (default=same as image)
+        image_path (str): Path to input drone GeoTIFF
+        index_name (str): Name of the index to calculate ('NDVI', 'EVI', etc.)
+        output_dir (str): Directory to save analysis results
         
     Returns:
         pd.DataFrame: DataFrame with homogeneity metrics
     """
+    print(f"Calculating and analyzing {index_name} for {os.path.basename(image_path)}...")
+    
+    # Create output directory based on index name
     if output_dir is None:
-        output_dir = os.path.dirname(image_path)
+        parent_dir = os.path.dirname(image_path)
+        output_dir = os.path.join(parent_dir, index_name)
     
     os.makedirs(output_dir, exist_ok=True)
     
+    # Calculate the vegetation index
+    index_array = func_calculate_index(image_path, index_name, output_dir)
+    
     # Prepare results storage
-    band_results = []
+    result = {}
     
     with rasterio.open(image_path) as src:
-        # Determine bands to analyze
-        if band_indices is None:
-            band_indices = list(range(1, src.count + 1))
-        
         # Get resolution and other metadata
         resolution = src.transform[0]
         image_name = os.path.basename(image_path)
         
-        print(f"Analyzing {image_name} with resolution {resolution}m...")
-        print(f"Processing {len(band_indices)} bands...")
+        # Create mask for valid data
+        mask = ~np.isnan(index_array)
+        if not np.any(mask):
+            print(f"Warning: {index_name} contains only NaN values. Skipping homogeneity analysis.")
+            return None
         
-        # Process each band
-        for band_idx in band_indices:
-            print(f"  Band {band_idx}...")
+        # Get valid data
+        valid_data = index_array[mask]
+        
+        # Basic statistics
+        mean_val = np.mean(valid_data)
+        std_val = np.std(valid_data)
+        cv = std_val / mean_val if mean_val != 0 else np.nan
+        
+        # Prepare result dictionary
+        result = {
+            'image': image_name,
+            'resolution': resolution,
+            'band': index_name,  # Use index name as band identifier
+            'index': index_name,
+            'mean': mean_val,
+            'std': std_val,
+            'cv': cv,
+            'min': np.min(valid_data),
+            'max': np.max(valid_data)
+        }
+        
+        # Calculate entropy
+        if valid_data.size > 0:
+            hist, _ = np.histogram(valid_data, bins=50, density=True)
+            hist = hist[hist > 0]  # Remove zeros
+            result['entropy'] = entropy(hist)
+        else:
+            result['entropy'] = np.nan
+        
+        # Calculate Moran's I (spatial autocorrelation)
+        try:
+            # Create weights matrix (Queen's case)
+            w = ndimage.generate_binary_structure(2, 2)
+            w[1, 1] = False  # Remove self
             
-            # Read band data
-            data = src.read(band_idx)
+            # Handle NaNs for convolution
+            data_centered = np.where(mask, index_array - np.mean(valid_data), 0)
             
-            # Check for NaN values
-            mask = ~np.isnan(data)
-            if not np.any(mask):
-                print(f"  Band {band_idx} contains only NaN values. Skipping.")
-                continue
-                
-            # Get valid data
-            valid_data = data[mask]
+            # Spatial lag
+            spatial_lag = ndimage.convolve(data_centered, w, mode='constant', cval=0)
             
-            # Basic statistics
-            mean_val = np.mean(valid_data)
-            std_val = np.std(valid_data)
-            cv = std_val / mean_val if mean_val != 0 else np.nan
+            # Calculate Moran's I
+            numer = np.sum(data_centered * spatial_lag)
+            denom = np.sum(data_centered * data_centered)
             
-            # Prepare result dictionary
-            result = {
-                'image': image_name,
-                'resolution': resolution,
-                'band': band_idx,
-                'mean': mean_val,
-                'std': std_val,
-                'cv': cv,
-                'min': np.min(valid_data),
-                'max': np.max(valid_data)
-            }
-            
-            # Calculate entropy
-            if valid_data.size > 0:
-                hist, _ = np.histogram(valid_data, bins=50, density=True)
-                hist = hist[hist > 0]  # Remove zeros
-                result['entropy'] = entropy(hist)
+            if denom > 0:
+                n = np.sum(mask)  # Valid pixels
+                w_sum = np.sum(w)  # Sum of weights
+                moran_i = (n / w_sum) * (numer / denom)
+                result['moran_i'] = moran_i
             else:
-                result['entropy'] = np.nan
-            
-            # Calculate Moran's I (spatial autocorrelation)
-            try:
-                # Create weights matrix (Queen's case)
-                w = ndimage.generate_binary_structure(2, 2)
-                w[1, 1] = False  # Remove self
-                
-                # Handle NaNs for convolution
-                data_centered = np.where(mask, data - np.mean(valid_data), 0)
-                
-                # Spatial lag
-                spatial_lag = ndimage.convolve(data_centered, w, mode='constant', cval=0)
-                
-                # Calculate Moran's I
-                numer = np.sum(data_centered * spatial_lag)
-                denom = np.sum(data_centered * data_centered)
-                
-                if denom > 0:
-                    n = np.sum(mask)  # Valid pixels
-                    w_sum = np.sum(w)  # Sum of weights
-                    moran_i = (n / w_sum) * (numer / denom)
-                    result['moran_i'] = moran_i
-                else:
-                    result['moran_i'] = np.nan
-            except Exception as e:
-                print(f"  Error calculating Moran's I: {e}")
                 result['moran_i'] = np.nan
-            
-            # Texture analysis with GLCM (if skimage is available)
-            if HAVE_SKIMAGE:
-                try:
-                    # Normalize data to 0-255 range for GLCM
-                    if np.max(valid_data) > np.min(valid_data):
-                        norm_data = np.zeros_like(data)
-                        norm_data[mask] = ((valid_data - np.min(valid_data)) / 
-                                        (np.max(valid_data) - np.min(valid_data)) * 255).astype(np.uint8)
+        except Exception as e:
+            print(f"  Error calculating Moran's I: {e}")
+            result['moran_i'] = np.nan
+        
+        # Calculate GLCM texture metrics
+        try:
+            # Normalize data to 0-255 range for GLCM
+            if np.max(valid_data) > np.min(valid_data):
+                norm_data = np.zeros_like(index_array)
+                norm_data[mask] = ((valid_data - np.min(valid_data)) / 
+                                (np.max(valid_data) - np.min(valid_data)) * 255).astype(np.uint8)
+                
+                # Take a sample if image is large
+                if norm_data.size > 1000000:
+                    # Find a central region with data
+                    rows, cols = np.where(mask)
+                    if len(rows) > 0:
+                        center_row = int(np.mean(rows))
+                        center_col = int(np.mean(cols))
                         
-                        # Take a sample if image is large (for performance)
-                        if norm_data.size > 1000000:
-                            # Find a central region with data
-                            rows, cols = np.where(mask)
-                            if len(rows) > 0:
-                                center_row = int(np.mean(rows))
-                                center_col = int(np.mean(cols))
-                                
-                                # Extract window
-                                size = min(500, min(data.shape))
-                                half_size = size // 2
-                                r_start = max(0, center_row - half_size)
-                                c_start = max(0, center_col - half_size)
-                                r_end = min(data.shape[0], r_start + size)
-                                c_end = min(data.shape[1], c_start + size)
-                                
-                                sample = norm_data[r_start:r_end, c_start:c_end]
-                            else:
-                                sample = norm_data
-                        else:
-                            sample = norm_data
+                        # Extract window
+                        size = min(500, min(index_array.shape))
+                        half_size = size // 2
+                        r_start = max(0, center_row - half_size)
+                        c_start = max(0, center_col - half_size)
+                        r_end = min(index_array.shape[0], r_start + size)
+                        c_end = min(index_array.shape[1], c_start + size)
                         
-                        # Calculate GLCM
-                        if np.sum(sample > 0) > 100:  # Ensure enough non-zero pixels
-                            sample = np.nan_to_num(sample).astype(np.uint8)
-                            glcm = graycomatrix(sample, 
-                                               distances=[1], 
-                                               angles=[0, np.pi/4, np.pi/2, 3*np.pi/4], 
-                                               levels=256,
-                                               symmetric=True, 
-                                               normed=True)
-                            
-                            # Extract GLCM properties
-                            result['glcm_contrast'] = graycoprops(glcm, 'contrast')[0, 0]
-                            result['glcm_dissimilarity'] = graycoprops(glcm, 'dissimilarity')[0, 0]
-                            result['glcm_homogeneity'] = graycoprops(glcm, 'homogeneity')[0, 0]
-                            result['glcm_energy'] = graycoprops(glcm, 'energy')[0, 0]
-                            result['glcm_correlation'] = graycoprops(glcm, 'correlation')[0, 0]
-                            result['glcm_asm'] = graycoprops(glcm, 'ASM')[0, 0]
-                        else:
-                            result['glcm_contrast'] = np.nan
-                            result['glcm_dissimilarity'] = np.nan
-                            result['glcm_homogeneity'] = np.nan
-                            result['glcm_energy'] = np.nan
-                            result['glcm_correlation'] = np.nan
-                            result['glcm_asm'] = np.nan
+                        sample = norm_data[r_start:r_end, c_start:c_end]
                     else:
-                        # All pixels have the same value
-                        result['glcm_contrast'] = 0
-                        result['glcm_dissimilarity'] = 0
-                        result['glcm_homogeneity'] = 1
-                        result['glcm_energy'] = 1
-                        result['glcm_correlation'] = np.nan
-                        result['glcm_asm'] = 1
-                except Exception as e:
-                    print(f"  Error in GLCM calculation: {e}")
+                        sample = norm_data
+                else:
+                    sample = norm_data
+                
+                # Calculate GLCM
+                if np.sum(sample > 0) > 100:  # Ensure enough non-zero pixels
+                    sample = np.nan_to_num(sample).astype(np.uint8)
+                    glcm = graycomatrix(sample, 
+                                      distances=[1], 
+                                      angles=[0, np.pi/4, np.pi/2, 3*np.pi/4], 
+                                      levels=256,
+                                      symmetric=True, 
+                                      normed=True)
+                    
+                    # Extract GLCM properties
+                    result['glcm_contrast'] = graycoprops(glcm, 'contrast')[0, 0]
+                    result['glcm_dissimilarity'] = graycoprops(glcm, 'dissimilarity')[0, 0]
+                    result['glcm_homogeneity'] = graycoprops(glcm, 'homogeneity')[0, 0]
+                    result['glcm_energy'] = graycoprops(glcm, 'energy')[0, 0]
+                    result['glcm_correlation'] = graycoprops(glcm, 'correlation')[0, 0]
+                    result['glcm_asm'] = graycoprops(glcm, 'ASM')[0, 0]
+                else:
                     result['glcm_contrast'] = np.nan
                     result['glcm_dissimilarity'] = np.nan
                     result['glcm_homogeneity'] = np.nan
                     result['glcm_energy'] = np.nan
                     result['glcm_correlation'] = np.nan
                     result['glcm_asm'] = np.nan
-            
-            # Add to results
-            band_results.append(result)
-    
-    # Create DataFrame from results
-    if band_results:
-        df = pd.DataFrame(band_results)
-        
-        # Save to CSV
-        base_name = os.path.splitext(os.path.basename(image_path))[0]
-        csv_path = os.path.join(output_dir, f"{base_name}_homogeneity.csv")
-        df.to_csv(csv_path, index=False)
-        print(f"Homogeneity metrics saved to: {csv_path}")
-        
-        return df
-    else:
-        print("No valid bands found for analysis.")
-        return None
-
-def analyze_directory(directory, pattern="*.tif", output_dir=None, band_indices=None):
-    """
-    Analyze homogeneity for all images in a directory.
-    
-    Parameters:
-        directory (str): Directory containing GeoTIFF files
-        pattern (str): File pattern to match
-        output_dir (str): Directory to save results
-        band_indices (list): List of band indices to analyze
-    
-    Returns:
-        pd.DataFrame: Combined DataFrame with all results
-    """
-    if output_dir is None:
-        output_dir = os.path.join(directory, "homogeneity_analysis")
-    
-    os.makedirs(output_dir, exist_ok=True)
-    
-    # Find all matching files
-    files = glob.glob(os.path.join(directory, pattern))
-    
-    if not files:
-        print(f"No files found matching pattern '{pattern}' in {directory}")
-        return None
-    
-    print(f"Found {len(files)} files to analyze")
-    
-    # Process each file
-    all_results = []
-    for file_path in tqdm(files, desc="Analyzing files"):
-        try:
-            df = analyze_homogeneity(file_path, band_indices, output_dir)
-            if df is not None:
-                all_results.append(df)
+            else:
+                # All pixels have the same value
+                result['glcm_contrast'] = 0
+                result['glcm_dissimilarity'] = 0
+                result['glcm_homogeneity'] = 1
+                result['glcm_energy'] = 1
+                result['glcm_correlation'] = np.nan
+                result['glcm_asm'] = 1
         except Exception as e:
-            print(f"Error processing {file_path}: {e}")
+            print(f"  Error in GLCM calculation: {e}")
+            result['glcm_contrast'] = np.nan
+            result['glcm_dissimilarity'] = np.nan
+            result['glcm_homogeneity'] = np.nan
+            result['glcm_energy'] = np.nan
+            result['glcm_correlation'] = np.nan
+            result['glcm_asm'] = np.nan
     
-    # Combine results
-    if all_results:
-        combined_df = pd.concat(all_results, ignore_index=True)
-        
-        # Save combined results
-        combined_csv = os.path.join(output_dir, "combined_homogeneity.csv")
-        combined_df.to_csv(combined_csv, index=False)
-        print(f"Combined results saved to: {combined_csv}")
-        
-        # Create visualizations
-        create_homogeneity_plots(combined_df, output_dir)
-        
-        return combined_df
-    else:
-        print("No valid results to combine.")
-        return None
+    # Create DataFrame and save results
+    df = pd.DataFrame([result])
+    base_name = os.path.splitext(os.path.basename(image_path))[0]
+    csv_path = os.path.join(output_dir, f"{base_name}_{index_name}_homogeneity.csv")
+    df.to_csv(csv_path, index=False)
+    print(f"Homogeneity metrics saved to: {csv_path}")
+    
+    return df
 
-def create_homogeneity_plots(df, output_dir):
+#%%
+def process_drone_images(input_path, indices=None, output_dir=None, pattern="*.tif"):
     """
-    Create visualizations of homogeneity metrics across resolutions.
+    Process drone images without command line arguments.
     
     Parameters:
-        df (pd.DataFrame): DataFrame with homogeneity results
-        output_dir (str): Directory to save plots
+        input_path (str): Path to input image file or directory
+        indices (list): List of indices to calculate ['NDVI', 'EVI', etc.]
+        output_dir (str): Directory to save results
+        resampled_dir (str): Directory with resampled images for multi-resolution analysis
+        pattern (str): File pattern if input_path is a directory
     """
-    print("Creating homogeneity visualization plots...")
+    if indices is None:
+        indices = ['NDVI']
     
-    # Ensure output directory exists
-    os.makedirs(output_dir, exist_ok=True)
+    print(f"Processing images with indices: {', '.join(indices)}")
     
-    # Check if we have resolution data to plot
-    if 'resolution' not in df.columns or df['resolution'].nunique() <= 1:
-        print("Not enough resolution data for comparative plots.")
-        return
-
-    # Sort by resolution for proper plotting
-    df = df.sort_values('resolution')
-    
-    # Determine which metrics to plot
-    all_metrics = ['cv', 'entropy', 'moran_i']
-    if 'glcm_homogeneity' in df.columns:
-        all_metrics.extend(['glcm_homogeneity', 'glcm_contrast', 'glcm_energy', 'glcm_correlation'])
-    
-    available_metrics = [m for m in all_metrics if m in df.columns]
-    
-    if not available_metrics:
-        print("No suitable metrics found for plotting.")
-        return
-    
-    # Create plots for each band
-    bands = df['band'].unique()
-    
-    for band in bands:
-        band_df = df[df['band'] == band]
-        
-        # Plot each metric vs resolution
-        for metric in available_metrics:
-            plt.figure(figsize=(10, 6))
-            sns.lineplot(data=band_df, x='resolution', y=metric, marker='o')
-            plt.xscale('log')
-            plt.title(f'Band {band}: {metric.replace("_", " ").title()} vs Resolution')
-            plt.xlabel('Resolution (meters)')
-            plt.ylabel(metric.replace('_', ' ').title())
-            plt.grid(True, which='both', linestyle='--', alpha=0.7)
+    if os.path.isdir(input_path):
+        # Process all files in directory
+        files = glob.glob(os.path.join(input_path, pattern))
+        if not files:
+            print(f"No files found matching pattern '{pattern}' in {input_path}")
+            return
             
-            # Save plot
-            plt.tight_layout()
-            plt.savefig(os.path.join(output_dir, f'band{band}_{metric}_vs_resolution.png'), dpi=300)
-            plt.close()
-    
-    # Create summary multi-metric plot for each band
-    for band in bands:
-        band_df = df[df['band'] == band]
-        
-        # Select up to 4 metrics for summary plot
-        plot_metrics = available_metrics[:min(4, len(available_metrics))]
-        
-        fig, axes = plt.subplots(2, 2, figsize=(15, 12))
-        axes = axes.flatten()
-        
-        for i, metric in enumerate(plot_metrics):
-            if i < len(axes):
-                sns.lineplot(data=band_df, x='resolution', y=metric, marker='o', ax=axes[i])
-                axes[i].set_xscale('log')
-                axes[i].set_title(f'{metric.replace("_", " ").title()}')
-                axes[i].set_xlabel('Resolution (meters)')
-                axes[i].set_ylabel(metric.replace('_', ' ').title())
-                axes[i].grid(True, which='both', linestyle='--', alpha=0.7)
-        
-        # Hide any unused axes
-        for i in range(len(plot_metrics), len(axes)):
-            axes[i].set_visible(False)
-        
-        plt.suptitle(f'Band {band}: Homogeneity Metrics vs Resolution', fontsize=16)
-        plt.tight_layout()
-        fig.subplots_adjust(top=0.92)
-        plt.savefig(os.path.join(output_dir, f'band{band}_summary.png'), dpi=300)
-        plt.close()
-    
-    # Create composite plot with all bands for selected metrics
-    for metric in ['cv', 'entropy', 'moran_i']:
-        if metric in available_metrics:
-            plt.figure(figsize=(10, 6))
-            sns.lineplot(data=df, x='resolution', y=metric, hue='band', marker='o')
-            plt.xscale('log')
-            plt.title(f'{metric.replace("_", " ").title()} vs Resolution (All Bands)')
-            plt.xlabel('Resolution (meters)')
-            plt.ylabel(metric.replace('_', ' ').title())
-            plt.grid(True, which='both', linestyle='--', alpha=0.7)
-            
-            plt.tight_layout()
-            plt.savefig(os.path.join(output_dir, f'all_bands_{metric}.png'), dpi=300)
-            plt.close()
-    
-    print(f"Visualization plots saved to: {output_dir}")
-
-def main():
-    """Main function to parse arguments and execute analysis"""
-    parser = argparse.ArgumentParser(description='Analyze spatial homogeneity in drone imagery.')
-    parser.add_argument('input', help='Input image file or directory')
-    parser.add_argument('-o', '--output', help='Output directory for results')
-    parser.add_argument('-b', '--bands', type=int, nargs='+', help='Band indices to analyze (default: all)')
-    parser.add_argument('-p', '--pattern', default='*.tif', help='File pattern if input is a directory')
-    parser.add_argument('-s', '--single', action='store_true', help='Process input as a single file, even if it is a directory')
-    
-    args = parser.parse_args()
-    
-    if args.single or not os.path.isdir(args.input):
-        # Process single file
-        analyze_homogeneity(args.input, args.bands, args.output)
+        print(f"Found {len(files)} files to process")
+        for file_path in tqdm(files, desc="Processing files"):
+            for index_name in indices:
+                try:
+                    calculate_and_analyze_index_directly(file_path, index_name, output_dir)
+                except Exception as e:
+                    print(f"Error processing {file_path} with {index_name}: {e}")
     else:
-        # Process directory
-        analyze_directory(args.input, args.pattern, args.output, args.bands)
+        # Process single file with all requested indices
+        print(f"Processing single file: {input_path}")
+        for index_name in indices:
+            calculate_and_analyze_index_directly(input_path, index_name, output_dir)
 
+# Example usage
 if __name__ == "__main__":
-    main()
+    # === EDIT THESE PARAMETERS FOR YOUR ANALYSIS ===
+    
+    # Option 1: Single image analysis - calculate and analyze NDVI for a single image
+    # process_drone_images(
+    #     input_path="/mnt/i/SCIENCE-IGN-ALL/AVOCA_Group/1_Personal_folders/3_Shunan/data/studentdebug/23_06_08_orthomosaic_georef_processed_resampled_nearest/23_06_08_orthomosaic_georef_processed_0.5m_nearest.tif",
+    #     indices=["NDVI"]
+    # )
+    
+    # Option 2: Multi-resolution analysis
+    # process_drone_images(
+    #     input_path="/mnt/i/SCIENCE-IGN-ALL/AVOCA_Group/1_Personal_folders/3_Shunan/data/studentdebug/23_06_08_orthomosaic_georef_processed.tif",
+    #     resampled_dir="/mnt/i/SCIENCE-IGN-ALL/AVOCA_Group/1_Personal_folders/3_Shunan/data/studentdebug/resampled",
+    #     indices=["NDVI", "EVI", "GNDVI"],
+    #     output_dir="/mnt/i/SCIENCE-IGN-ALL/AVOCA_Group/1_Personal_folders/3_Shunan/data/studentdebug/results"
+    # )
+    
+    # Option 3: Process all images in a directory
+    process_drone_images(
+        input_path="/mnt/i/SCIENCE-IGN-ALL/AVOCA_Group/1_Personal_folders/3_Shunan/data/studentdebug/23_06_08_orthomosaic_georef_processed_resampled_nearest",
+        indices=["NDVI", "GCC", "GLI", "SLAVI"],
+        pattern="*.tif"
+    )

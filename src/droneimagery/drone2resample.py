@@ -36,7 +36,7 @@ def resample_drone_image(input_path, output_path=None, target_resolution=None,
         target_resolution (float): Desired pixel size in dataset units (usually meters)
         resample_method (str): Resampling algorithm: 'nearest', 'bilinear', 'cubic', 
                                'cubic_spline', 'lanczos', 'average', 'mode', 'max', 'min',
-                               'med', 'q1', 'q3', 'sum', 'gauss'
+                               'med', 'q1', 'q3', 'sum', 'rms'
         format_options (dict): Additional format-specific options for output
 
     Note: mode takes significantly longer to process than other methods
@@ -56,14 +56,14 @@ def resample_drone_image(input_path, output_path=None, target_resolution=None,
         'cubic_spline': Resampling.cubic_spline,
         'lanczos': Resampling.lanczos,
         'average': Resampling.average,
-        'mode': Resampling.mode,
+        'mode': Resampling.mode, # significantly slower, not recommended
         'max': Resampling.max,
         'min': Resampling.min,
         'med': Resampling.med,
         'q1': Resampling.q1,
         'q3': Resampling.q3,
         'sum': Resampling.sum,
-        'gauss': Resampling.gauss
+        'gauss': Resampling.rms
     }
     
     if resample_method not in resampling_methods:
@@ -257,11 +257,12 @@ def main():
     input_path = "/mnt/i/SCIENCE-IGN-ALL/AVOCA_Group/1_Personal_folders/3_Shunan/data/studentdebug/23_06_08_orthomosaic_georef_processed.tif"
     target_resolutions = [0.1, 0.5, 1, 2, 3, 5, 10, 15, 20, 30]  # list of resolutions in meters
     resample_methods = [
-        'max', 'min',
-        'med', 'q1', 'q3', 'sum', 'gauss'
-    ]  # common resampling methods'nearest', 'bilinear', 'cubic', 
-        # 'cubic_spline', 'lanczos', 
-        # 'average', 'mode', 
+        # common resampling methods
+        'nearest', 'bilinear', 'cubic', 
+        'cubic_spline', 'lanczos', 
+        'average', 'max', 'min',
+        'med', 'q1', 'q3', 'sum', 'rms'
+    ]  
     
     # Loop through each resampling method
     for resample_method in resample_methods:
@@ -280,6 +281,8 @@ def main():
             # Only visualize the resampled image if resampling was performed
             if output_path:
                 visualize_resampled_image(output_path, resample_method=resample_method)
-
+    # alternatively, process and visualize a single resampled image
+    # output_path = resample_drone_image(input_path, target_resolution=0.02, resample_method='nearest')
+    # visualize_resampled_image(output_path, resample_method='nearest')
 if __name__ == "__main__":
     main()

@@ -277,7 +277,7 @@ def visualize_results(ms_path, thermal_path, downsample_factor):
 
 #%% Example usage
 if __name__ == "__main__":
-    input_image = "/mnt/i/SCIENCE-IGN-ALL/AVOCA_Group/1_Personal_folders/3_Shunan/data/studentdebug/20230608_orthomosaic32022.tif"  # Replace with your file path
+    input_image = "/mnt/i/SCIENCE-IGN-ALL/AVOCA_Group/1_Personal_folders/3_Shunan/data/studentdebug/23_06_08_orthomosaic_georef.tif"  # Replace with your file path
     output_directory = "/mnt/i/SCIENCE-IGN-ALL/AVOCA_Group/1_Personal_folders/3_Shunan/data/studentdebug/"  # Optional, replace with your preferred output directory
     
     # Process the image
