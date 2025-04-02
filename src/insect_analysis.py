@@ -561,3 +561,68 @@ plt.tight_layout()
 fig.savefig('/mnt/i/SCIENCE-IGN-ALL/AVOCA_Group/2_Shared_folders/5_Projects/2025Abisko/analysis/print/greenness_ratio_closeup4Simon.png', dpi=300)
 
 # %%
+#%% Combined plot of understory and birch ratios for west-facing images with closeup images
+# Define a consistent color palette for years
+years = sorted(list(set(west_df['year'].unique()).union(set(df_closeup['year'].unique()))))
+wigglytuff_palette =["#205a62", "#52a48b", "#734118"]
+year_palette = {year: color for year, color in zip(years, wigglytuff_palette)}
+
+fig, ax1 = plt.subplots(figsize=(14, 8))
+# Plot greenness data
+sns.lineplot(data=west_df, x='doys', y='green_ratio', hue='year', ax=ax1, palette=year_palette)
+
+# Create second y-axis
+ax2 = ax1.twinx()
+ax2.grid(False)
+
+# Plot closeup data with different groups with error bars
+# Plot closeup data with consistent colors but different markers for each group
+# Extract imgroup (first letter of group) from filenames
+df_closeup['imgroup'] = df_closeup['group'].str[0]  # Take just the first letter (E from E2, etc.)
+groups = df_closeup['imgroup'].unique()
+markers = {group: marker for group, marker in zip(groups, ['o', 's', '^', 'D', 'v', '<', '>', 'p', '*', 'X'])}
+
+for year in df_closeup['year'].unique():
+    year_data = df_closeup[df_closeup['year'] == year]
+    
+    # Group by both doy and image group
+    for group, group_data in year_data.groupby('imgroup'):
+        # Calculate mean and std for each doy within this group
+        group_data_agg = group_data.groupby('doy').agg({
+            'green_ratio': ['mean', 'std']
+        }).reset_index()
+        group_data_agg.columns = ['doy', 'green_ratio', 'sd']  # Flatten column names
+        
+        # Use the grouped data for plotting with error bars
+        for i, row in group_data_agg.iterrows():
+            ax2.errorbar(
+                x=row['doy'],
+                y=row['green_ratio'],
+                yerr=row['sd'],
+                color=year_palette[year],
+                marker=markers[group],
+                linestyle='',
+                label=f"Closeup {group} {year}" if i == 0 else ""  # Only add label for first point
+            )
+
+# Set axis labels and limits
+ax1.set_xlabel('Day of Year')
+ax1.set_ylabel('Vegetation Ratio - Tower Images')
+ax2.set_ylabel('Green Ratio - Closeup Images')
+ax1.set_xlim(125, 300)
+ax1.set_ylim(-0.01, 0.9)  # Adjusted to focus on the growing season
+ax2.set_ylim(-0.01, 0.9)  # Match with tower images
+
+# Create a combined legend
+handles1, labels1 = ax1.get_legend_handles_labels()
+handles2, labels2 = ax2.get_legend_handles_labels()
+all_handles = handles1 + handles2
+ax1.legend(handles1 + handles2, [f"Greenness {label}" for label in labels1] + labels2, loc='best')
+
+# Remove the second legend
+ax2.get_legend().remove() if ax2.get_legend() else None
+
+plt.tight_layout()
+fig.savefig('/mnt/i/SCIENCE-IGN-ALL/AVOCA_Group/2_Shared_folders/5_Projects/2025Abisko/analysis/print/vegetation_ratio_closeup_by_group.png', dpi=300, bbox_inches='tight')
+
+# %%
