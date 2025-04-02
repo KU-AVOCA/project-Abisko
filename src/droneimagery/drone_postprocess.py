@@ -36,7 +36,7 @@ def process_altum_orthomosaic(input_path, output_dir=None):
         width = src.width
         height = src.height
         dtype = profile['dtype']
-        scaling_factor = 10000
+        scaling_factor = 32768
         
         print(f"Image has {band_count} bands, dimensions: {width}x{height}, dtype: {dtype}")
         
@@ -277,8 +277,8 @@ def visualize_results(ms_path, thermal_path, downsample_factor):
 
 #%% Example usage
 if __name__ == "__main__":
-    input_image = "/mnt/i/SCIENCE-IGN-ALL/AVOCA_Group/1_Personal_folders/3_Shunan/data/studentdebug/23_06_08_orthomosaic_georef.tif"  # Replace with your file path
-    output_directory = "/mnt/i/SCIENCE-IGN-ALL/AVOCA_Group/1_Personal_folders/3_Shunan/data/studentdebug/"  # Optional, replace with your preferred output directory
+    input_image = "/mnt/i/SCIENCE-IGN-ALL/AVOCA_Group/4_Student projects/1_Monika_Kathrine/1_Data/orthomosaics_georef/23_07_05_orthomosaic_georef.tif"  # Replace with your file path
+    output_directory = "/mnt/i/SCIENCE-IGN-ALL/AVOCA_Group/2_Shared_folders/5_Projects/2025Abisko/drone/orthomosaic4analysis/"  # Optional, replace with your preferred output directory
     
     # Process the image
     ms_output, thermal_output = process_altum_orthomosaic(input_image, output_directory)
