@@ -315,7 +315,7 @@ def process_directory(input_dir, index_names, output_dir=None, pattern="*.tif",
 if __name__ == "__main__":
     # === CHOOSE YOUR INDICES HERE ===
     # Available indices: 'NDVI', 'EVI', 'GNDVI', 'GLI', 'GCC', 'blue', 'green', 'red', 'red_edge', 'nir'
-    index_names = ['gNDVI', 'GCC']  # Change these to any two indices you want to compare
+    index_names = ['GNDVI', 'GCC']  # Change these to any two indices you want to compare
     
     # === CUSTOMIZE VISUALIZATIONS HERE ===
     # Set specific colormaps for each index
