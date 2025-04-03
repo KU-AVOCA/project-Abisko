@@ -201,7 +201,7 @@ for i in tqdm.tqdm(imfiles, desc="Processing images"):
         
         # Save the figure to the mirrored directory structure
         output_path = os.path.join(output_dir, f"{base_filename}_green_masked{extension}")
-        fig.savefig(output_path)
+        fig.savefig(output_path, bbox_inches='tight', dpi=300)
         plt.close(fig)  # Close the figure to free memory
 
     else:
