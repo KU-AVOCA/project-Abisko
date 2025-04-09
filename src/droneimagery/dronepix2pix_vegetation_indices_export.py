@@ -315,20 +315,20 @@ def process_directory(input_dir, index_names, output_dir=None, pattern="*.tif",
 if __name__ == "__main__":
     # === CHOOSE YOUR INDICES HERE ===
     # Available indices: 'NDVI', 'EVI', 'GNDVI', 'GLI', 'GCC', 'blue', 'green', 'red', 'red_edge', 'nir'
-    index_names = ['GNDVI', 'GCC']  # Change these to any two indices you want to compare
+    index_names = ['LAI', 'GCC']  # Change these to any two indices you want to compare
     
     # === CUSTOMIZE VISUALIZATIONS HERE ===
     # Set specific colormaps for each index
     # Available colormaps: https://matplotlib.org/stable/tutorials/colors/colormaps.html
     # or from cmocean: https://matplotlib.org/cmocean/
     colormaps = {
-        'GNDVI': 'nuuk',  # Use crameri's nuuk colormap for NDVI
+        'LAI': 'nuuk',  # Use crameri's nuuk colormap for NDVI
         'GCC': 'speed'  # Use cmocean's algae colormap for GCC
     }
     
     # Set specific value ranges for color scaling
     value_ranges = {
-        'GNDVI': (-1, 1),  # 
+        'LAI': (-1, 1),  # 
         'GCC': (0, 1)     # 
     }
     
