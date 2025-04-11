@@ -1,14 +1,27 @@
 // Simple CCDC Time Series Visualization 
 // Plot E1 has highest BVOC emission in 2023
 var poi = ee.Geometry.Point([19.0524377, 68.34836531]);
-var roi = poi.buffer(30).bounds();
+// var roi = poi.buffer(30).bounds();
+var roi = 
+    /* color: #d63000 */
+    /* displayProperties: [
+      {
+        "type": "rectangle"
+      }
+    ] */
+    ee.Geometry.Polygon(
+        [[[18.650628517410595, 68.37246412370075],
+          [18.650628517410595, 68.28955676896352],
+          [19.180032203934033, 68.28955676896352],
+          [19.180032203934033, 68.37246412370075]]], null, false);
 Map.addLayer(poi, {color: 'red'}, 'poi');
 Map.addLayer(roi, {color: 'black'}, 'roi');
 Map.centerObject(poi, 8);
+var proj = 'EPSG:32634'; // UTM zone 34N for Abisko
 
 // Time period matching your CCDC analysis
 var startDate = '2014-01-01';
-var endDate = '2024-12-31';
+var endDate = '2014-12-31';
 var dateStart = ee.Date(startDate);
 var dateEnd = ee.Date(endDate);
 
@@ -60,6 +73,16 @@ function bandMath(image) {
         }).rename('GCC');
     return image.addBands(GCC).copyProperties(image, ['system:time_start']);
 }
+// function to calcuate the defoliation intensity
+function scoreCalculation(image) {
+  var conditionScore = image.expression(
+      '(GCC - GCC_predicted) / GCC_RMSE', {
+          'GCC_predicted': image.select('GCC_predicted'),
+          'GCC': image.select('GCC'),
+          'GCC_RMSE': image.select('GCC_RMSE')
+      }).rename('conditionScore');
+  return image.addBands(conditionScore).copyProperties(image, ['system:time_start']);
+}
 
 // Load and process data
 var hlsL = ee.ImageCollection('NASA/HLS/HLSL30/v002')
@@ -78,6 +101,13 @@ var hlsS = ee.ImageCollection('NASA/HLS/HLSS30/v002')
 
 var hls = hlsL.merge(hlsS).select(bands);
 
+// prepare an image collection of daily hls images and add predicted GCC
+// and condition score
+
+// Load the CCDC results
+var ccdcAsset = ee.Image('projects/ku-gem/assets/ccdcAbisko2014-2021'); // GCC, R, G, B, SWIR1, Tmask applied
+var ccdcImage = utils.CCDC.buildCcdImage(ccdcAsset, 1, ['GCC']);
+
 // Convert to daily average
 var diff = dateEnd.difference(dateStart, 'day');
 var dayNum = 1;
@@ -87,118 +117,65 @@ var range = ee.List.sequence(0, diff.subtract(1), dayNum).map(function(day){
 
 var day_mosaics = function(date, newlist) {
   date = ee.Date(date);
+  var inputDate = date.format('YYYY-MM-dd');
+  var dateParams = {inputFormat: 3, inputDate: inputDate, outputFormat: 1};
+  var formattedDate = utils.Dates.convertDate(dateParams);
+
   newlist = ee.List(newlist);
   var filtered = hls.filterDate(date, date.advance(dayNum,'day'));
   var image = ee.Image(
       filtered.mean().copyProperties(filtered.first()))
       .set('system:index', date.format('yyyy-MM-dd'))
       .set('system:time_start', filtered.first().get('system:time_start'));
-  return ee.List(ee.Algorithms.If(filtered.size(), newlist.add(image), newlist));
-};
-
-var hlsDaily = ee.ImageCollection(ee.List(range.iterate(day_mosaics, ee.List([]))));
-
-// Load the CCDC results
-var ccdcAsset = ee.Image('projects/ku-gem/assets/ccdcAbisko2014-2021'); // GCC, R, G, B, SWIR1, Tmask applied
-var ccdcImage = utils.CCDC.buildCcdImage(ccdcAsset, 1, ['GCC']);
-// create image collection of synthetic images
-
-var day_synthetic = function(date, newlist) {
-  date = ee.Date(date);
-  var inputDate = date.format('YYYY-MM-dd');
-  var dateParams = {inputFormat: 3, inputDate: inputDate, outputFormat: 1};
-  var formattedDate = utils.Dates.convertDate(dateParams);
-
+  
   var syntheticImage = utils.CCDC.getSyntheticForYear(
     ccdcImage, formattedDate, 1, 'GCC', 'S1'
   ).set('system:time_start', date.millis())
    .set('system:index', date.format('yyyy-MM-dd'))
    .rename('GCC_predicted');
-  
-  newlist = ee.List(newlist);
 
-  return ee.List(newlist.add(syntheticImage));
-}
+  var coefImage = utils.CCDC.getMultiCoefs(
+    ccdcImage, formattedDate, bands, ['INTP', 'SLP', 'RMSE'], true, ['S1'], 'after'
+  ).set('system:time_start', date.millis())
+   .set('system:index', date.format('yyyy-MM-dd'));
+  var rmseImage = coefImage.select('GCC_RMSE')
+  .set('system:time_start', date.millis())
+   .set('system:index', date.format('yyyy-MM-dd'));
+
+  var newImage = syntheticImage.addBands(rmseImage).addBands(image);
+
+  return ee.List(ee.Algorithms.If(filtered.size(), newlist.add(newImage), newlist));
+};
+
+var hlsDaily = ee.ImageCollection(ee.List(range.iterate(day_mosaics, ee.List([]))));
 
 
-var syntheticDaily = ee.ImageCollection(ee.List(range.iterate(day_synthetic, ee.List([]))));
+var imgCollection = hlsDaily.map(scoreCalculation);
 
-var imgcollection = syntheticDaily.linkCollection(
-  hlsDaily, 'GCC'
-).select(['GCC_predicted', 'GCC']);
 
-// Export the time series data to Google Drive
-// Note: You can modify the export parameters as per your requirements
-var allObs = imgcollection.map(function(image) {
-  var obs = image.reduceRegion({
-    reducer: ee.Reducer.mean(),
-    geometry: poi,
-    scale: 30,
-    maxPixels: 1e13
-  });
-  return image.set('GCC', obs.get('GCC'))
-              .set('GCC_predicted', obs.get('GCC_predicted'))
-              // .set('system:index', image.get('system:index'))
-              .set('system:time_start', image.get('system:time_start'));
-}
+// Batch export images to Google Drive
+var batch = require('users/fitoprincipe/geetools:batch');
+// band1: GCC_predicted
+// band2: GCC_RMSE
+// band3: GCC
+// band4: conditionScore
+
+batch.Download.ImageCollection.toDrive(
+  imgCollection.select(['GCC_predicted', 'GCC_RMSE', 'GCC', 'conditionScore']),
+  'Abisko',
+  {
+   crs: proj,
+   region: roi, 
+   type: 'double',
+   scale: 30,
+   maxPixels: 1e13,
+   name: 'GCC_Abisko_{system_date}'
+  }
 );
 
-var timeSeries = ee.Feature(null, allObs);
-Export.table.toDrive({
-  collection: timeSeries,
-  description: 'E1_GCC_GCC_predicted_2013_2024',
-  folder: 'Abisko',
-  fileFormat: 'CSV'
-});
-
-// create a time series chart
-var chart = ui.Chart.image.seriesByRegion({
-  imageCollection: imgcollection,
-  regions: roi,
-  reducer: ee.Reducer.mean(),
-  scale: 30,
-  xProperty: 'system:time_start'
-}).setOptions({
-  title: 'GCC Time Series',
-  lineWidth: 1,
-  pointSize: 3,
-  series: {
-    0: { type: 'line', color: 'blue' }, // GCC_predicted as line
-    1: { type: 'scatter', color: 'red' }  // GCC as scatter
-  }
-});
-print(chart);
-// print(syntheticDaily, 'syntheticDaily');
-
-// Create a time series chart
-var chart = ui.Chart.image.seriesByRegion({
-  imageCollection: syntheticDaily.select('GCC_predicted'),
-  regions: roi,
-  reducer: ee.Reducer.mean(),
-  scale: 30,
-  xProperty: 'system:time_start'
-}).setOptions({
-  title: 'Synthetic GCC Time Series',
-  lineWidth: 1,
-  pointSize: 3,
-  // seriesProperty: 'system:time_start'
-});
-print(chart);
-
-// Create a time series chart for the original data
-var chartOriginal = ui.Chart.image.seriesByRegion({
-  imageCollection: hls.select('GCC'),
-  // bandName: 'GCC',
-  regions: roi,
-  reducer: ee.Reducer.mean(),
-  scale: 30,
-  xProperty: 'system:time_start'
-}).setChartType('ScatterChart')
-  .setOptions({
-  title: 'Original GCC Time Series',
-  // lineWidth: 1,
-  // lineWidth: 1,
-  pointSize: 3,
-  // seriesProperty: 'system:index'
-});
-print(chartOriginal);
+// optional: add layers to map, choose day 2023-06-27
+// var palettes = require('users/gena/packages:palettes');
+// var imgshow = imgCollection.filterDate('2023-06-27', '2023-06-28').mean();
+// Map.addLayer(imgshow, {bands: ['GCC_predicted'], min: 0, max: 1, palette: palettes.colorbrewer.YlOrRd[9]}, 'GCC_predicted');
+// Map.addLayer(imgshow, {bands: ['GCC'], min: 0, max: 1, palette: palettes.colorbrewer.YlOrRd[9]}, 'GCC');
+// Map.addLayer(imgshow, {bands: ['conditionScore'], min: -4, max: 4, palette: palettes.cmocean.Balance[7]}, 'conditionScore');

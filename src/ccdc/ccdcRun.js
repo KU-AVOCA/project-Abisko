@@ -1,16 +1,28 @@
 
 var poi = ee.Geometry.Point([19.05077561, 68.34808742]);
-var roi = poi.buffer(10000).bounds();
+// var roi = poi.buffer(10000).bounds();
+var roi = 
+    /* color: #d63000 */
+    /* displayProperties: [
+      {
+        "type": "rectangle"
+      }
+    ] */
+    ee.Geometry.Polygon(
+        [[[18.650628517410595, 68.37246412370075],
+          [18.650628517410595, 68.28955676896352],
+          [19.180032203934033, 68.28955676896352],
+          [19.180032203934033, 68.37246412370075]]], null, false);
 Map.addLayer(poi, {color: 'red'}, 'poi');
 Map.addLayer(roi, {color: 'black'}, 'roi');
 Map.centerObject(poi, 8);
 
-var startDate = '2013-01-01';
+var startDate = '2014-01-01';
 var endDate = '2021-12-31';
 var dateStart = ee.Date(startDate);
 var dateEnd = ee.Date(endDate);
 
-var bands = ['GCC', 'Green', 'SWIR1']; // Green and SWIR1 are used for Tmask
+var bands = ['GCC', 'Green', 'SWIR1', 'Blue', 'Red']; // Green and SWIR1 are used for Tmask
 
 /**
  * Functions for preprocessing Landsat and Sentinel-2 data
@@ -33,6 +45,7 @@ function renamHLSL30(image) {
 // Function to mask clouds and shadows
 function maskhls(image) {
     var qa = image.select('Fmask');
+    var imgtime = image.get('system:time_start');
 
     var cloudMask = qa.bitwiseAnd(1 << 1).eq(0);
     var adjacentCloudMask = qa.bitwiseAnd(1 << 2).eq(0);
@@ -40,11 +53,13 @@ function maskhls(image) {
 
     var mask = cloudMask.and(adjacentCloudMask).and(cloudShadowMask);
 
-    return image.updateMask(mask).divide(10000);
+    return image.updateMask(mask).divide(10000).copyProperties(image)
+        .set('system:time_start', imgtime);
 }
 
 // Function for band math
 function bandMath(image) {
+    
     var GCC = image.expression(
         'Green / (Red + Green + Blue)', {
             'Green': image.select('Green'),
@@ -52,7 +67,7 @@ function bandMath(image) {
             'Blue': image.select('Blue')
         }).rename('GCC');
 
-    return image.addBands(GCC);
+    return image.addBands(GCC).copyProperties(image);
 }
 
 /**
@@ -74,40 +89,40 @@ var hlsS = ee.ImageCollection('NASA/HLS/HLSS30/v002')
 
 var hls = hlsL.merge(hlsS).select(bands);
 
-// convert to daily average
-// Difference in days between start and finish
-var diff = dateEnd.difference(dateStart, 'day');
+// // convert to daily average
+// // Difference in days between start and finish
+// var diff = dateEnd.difference(dateStart, 'day');
 
-// Make a list of all dates
-var dayNum = 1; // steps of day number
-var range = ee.List.sequence(0, diff.subtract(1), dayNum).map(function(day){return dateStart.advance(day,'day')});
+// // Make a list of all dates
+// var dayNum = 1; // steps of day number
+// var range = ee.List.sequence(0, diff.subtract(1), dayNum).map(function(day){return dateStart.advance(day,'day')});
 
-// Function for iteration over the range of dates
-var day_mosaics = function(date, newlist) {
-  // Cast
-  date = ee.Date(date);
-  newlist = ee.List(newlist);
+// // Function for iteration over the range of dates
+// var day_mosaics = function(date, newlist) {
+//   // Cast
+//   date = ee.Date(date);
+//   newlist = ee.List(newlist);
 
-  // Filter collection between date and the next day
-  var filtered = hls.filterDate(date, date.advance(dayNum,'day'));
-  // Make the mosaic
-  var image = ee.Image(
-      filtered.mean().copyProperties(filtered.first()))
-    //   .set({'system:index': date.format('yyyy_MM_dd')})
-      .set('system:time_start', filtered.first().get('system:time_start'));
+//   // Filter collection between date and the next day
+//   var filtered = hls.filterDate(date, date.advance(dayNum,'day'));
+//   // Make the mosaic
+//   var image = ee.Image(
+//       filtered.mean().copyProperties(filtered.first()))
+//     //   .set({'system:index': date.format('yyyy_MM_dd')})
+//       .set('system:time_start', filtered.first().get('system:time_start'));
 
-  // Add the mosaic to a list only if the collection has images
-  return ee.List(ee.Algorithms.If(filtered.size(), newlist.add(image), newlist));
-};
+//   // Add the mosaic to a list only if the collection has images
+//   return ee.List(ee.Algorithms.If(filtered.size(), newlist.add(image), newlist));
+// };
 
-var hslDaily = ee.ImageCollection(ee.List(range.iterate(day_mosaics, ee.List([]))));
-Map.addLayer(hslDaily.first(), {bands: ['GCC'], min: 0, max: 1}, 'hslDaily');
+// var hslDaily = ee.ImageCollection(ee.List(range.iterate(day_mosaics, ee.List([]))));
+// Map.addLayer(hslDaily.first(), {bands: ['GCC'], min: 0, max: 1}, 'hslDaily');
 /**
  * Run CCDC
  */
 // set CCDC parameters
 var ccdcParams = {
-    collection: hslDaily,
+    collection: hls,
     breakpointBands: bands,
     tmaskBands: ['Green', 'SWIR1'],
     minObservations: 6,
