@@ -81,7 +81,14 @@ function scoreCalculation(image) {
           'GCC': image.select('GCC'),
           'GCC_RMSE': image.select('GCC_RMSE')
       }).rename('conditionScore');
-  return image.addBands(conditionScore).copyProperties(image, ['system:time_start']);
+  var relativeDeviation = image.expression(
+      '(GCC - GCC_predicted) / GCC_predicted', {
+          'GCC_predicted': image.select('GCC_predicted'),
+          'GCC': image.select('GCC')
+      }).rename('relativeDeviation');
+
+  return image.addBands(conditionScore).copyProperties(image, ['system:time_start'])
+              .addBands(relativeDeviation).copyProperties(image, ['system:time_start']);
 }
 
 // Load and process data
@@ -159,9 +166,10 @@ var batch = require('users/fitoprincipe/geetools:batch');
 // band2: GCC_RMSE
 // band3: GCC
 // band4: conditionScore
+// band5: relativeDeviation
 
 batch.Download.ImageCollection.toDrive(
-  imgCollection.select(['GCC_predicted', 'GCC_RMSE', 'GCC', 'conditionScore']),
+  imgCollection.select(['GCC_predicted', 'GCC_RMSE', 'GCC', 'conditionScore', 'relativeDeviation']),
   'Abisko',
   {
    crs: proj,
@@ -172,6 +180,7 @@ batch.Download.ImageCollection.toDrive(
    name: 'GCC_Abisko_{system_date}'
   }
 );
+
 
 // optional: add layers to map, choose day 2023-06-27
 // var palettes = require('users/gena/packages:palettes');
