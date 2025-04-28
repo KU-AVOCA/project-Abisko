@@ -164,11 +164,13 @@ df_bvoc['doys'] = df_bvoc['date'].dt.dayofyear
 df_bvoc_emp = df_bvoc[df_bvoc['Species'] == 'Emp.']
 # Group BVOC data by date to get daily means and standard deviations
 df_bvoc_emp_daily = df_bvoc_emp.groupby(['date']).agg({
-    'Total_BVOC': ['mean', 'std', 'count']
+    'Total_BVOC': ['mean', 'std', 'count'],
+    'GreenRatio': ['mean', 'std', 'count']
 }).reset_index()
 
 # Flatten the multi-level columns
-df_bvoc_emp_daily.columns = ['date', 'Total_BVOC_mean', 'Total_BVOC_std', 'Total_BVOC_count']
+df_bvoc_emp_daily.columns = ['date', 'Total_BVOC_mean', 'Total_BVOC_std', 'Total_BVOC_count', 
+                           'GreenRatio_mean', 'GreenRatio_std', 'GreenRatio_count']
 
 # # Replace NaN values in std column with 0 (for dates with only one measurement)
 # df_bvoc_daily['Total_BVOC_std'] = df_bvoc_daily['Total_BVOC_std'].fillna(0)
@@ -205,7 +207,7 @@ ax2.errorbar(
     color="#734118",
     marker='o',
     linestyle='',
-    label='Insect Abundance (mean ± sd)',
+    label=r'Insect Abundance (mean ± 1$\sigma$)',
 )
 ax2.set(
     ylabel='Insect Abundance',
@@ -213,7 +215,8 @@ ax2.set(
 )
 
 # Second subplot: Tower greenness ratio with insect abundance
-sns.lineplot(data=west_df, x='date', y='green_ratio', ax=ax3, label='Greenness Ratio', color="#205a62")
+sns.lineplot(data=west_df, x='date', y='green_ratio', ax=ax3, label='Time-lapse Greenness Ratio', color="#205a62")
+sns.scatterplot(data=df_bvoc_emp_daily, x='date', y='GreenRatio_mean', ax=ax3, label='Close-up Greenness Ratio (mean)', color="#205a62", marker='x')
 ax4 = ax3.twinx()
 ax4.grid(False)
 # Plot insect abundance data with error bars on second subplot
@@ -246,15 +249,6 @@ sns.scatterplot(
     color="#205a62",
     marker='s'
 )
-# ax5.errorbar(
-#     x=df_bvoc_emp_daily['date'],
-#     y=df_bvoc_emp_daily['Total_BVOC_mean'],
-#     yerr=df_bvoc_emp_daily['Total_BVOC_std'],
-#     color="#205a62",
-#     marker='s',
-#     linestyle='',
-#     label='BVOC (mean ± sd)',
-# )
 ax6 = ax5.twinx()
 ax6.grid(False)
 # Plot insect abundance data with error bars on third subplot
@@ -270,7 +264,6 @@ ax6.errorbar(
 ax5.set(
     xlabel='Date',
     ylabel=r'BVOC Emissions ng$\cdot$m$^{-2}$$\cdot$h$^{-1}$',
-    ylim=(0, 1000),
     xlim=(pd.to_datetime("2021-01-01"), pd.to_datetime("2023-12-31")),
 )
     
@@ -301,7 +294,7 @@ fig.legend(
     unique_handles, 
     unique_labels, 
     loc='upper center', 
-    bbox_to_anchor=(0.51, 0.96), 
+    bbox_to_anchor=(0.51, 1), 
     ncol=len(unique_labels)/2, 
     frameon=True
 )
@@ -324,7 +317,7 @@ insect_gcc = pd.merge(
     df_ccdc[['date', 'GCC']],
     on='date',
     how='inner'
-)
+).dropna()
 
 # Merge insect data with tower camera data (greenness ratio)
 # First get daily average greenness ratio
@@ -350,8 +343,8 @@ sns.regplot(
     line_kws={'color':'red'},
     ax=ax1
 )
-# r_gcc, p_gcc = stats.pearsonr(insect_gcc['GCC'], insect_gcc['total_mean'])
-# ax1.set_title(f'Insect Abundance vs GCC\nr = {r_gcc:.2f}, p = {p_gcc:.3f}')
+r_gcc, p_gcc = stats.pearsonr(insect_gcc['GCC'], insect_gcc['total_mean'])
+ax1.set_title(f'Insect Abundance vs GCC\nr = {r_gcc:.2f}, p = {p_gcc:.3f}')
 ax1.set_xlabel('Green Chromatic Coordinate (GCC)')
 ax1.set_ylabel('Insect Abundance (mean)')
 
@@ -364,10 +357,10 @@ sns.regplot(
     line_kws={'color':'red'},
     ax=ax2
 )
-# r_green, p_green = stats.pearsonr(insect_greenratio['green_ratio'], insect_greenratio['total_mean'])
-# ax2.set_title(f'Insect Abundance vs Greenness Ratio\nr = {r_green:.2f}, p = {p_green:.3f}')
-# ax2.set_xlabel('Greenness Ratio')
-# ax2.set_ylabel('Insect Abundance (mean)')
+r_green, p_green = stats.pearsonr(insect_greenratio['green_ratio'], insect_greenratio['total_mean'])
+ax2.set_title(f'Insect Abundance vs Greenness Ratio\nr = {r_green:.2f}, p = {p_green:.3f}')
+ax2.set_xlabel('Greenness Ratio')
+ax2.set_ylabel('Insect Abundance (mean)')
 
 # plt.tight_layout()
 # plt.show()
@@ -375,8 +368,7 @@ sns.regplot(
 # Merge tower greenness ratio data with CCDC data (GCC)
 daily_green_ratio = west_df.groupby('date')['green_ratio'].mean().reset_index()
 daily_green_ratio['date'] = pd.to_datetime(daily_green_ratio['date'])
-# remove green ratio = 0
-daily_green_ratio = daily_green_ratio[daily_green_ratio['green_ratio'] > 0]
+
 gcc_greenratio = pd.merge(
     daily_green_ratio,
     df_ccdc[['date', 'GCC']],
@@ -405,4 +397,40 @@ ax.set_ylabel('Green Chromatic Coordinate (GCC)')
 # fig.savefig('../print/green_ratio_vs_gcc.pdf', dpi=300, bbox_inches='tight')
 
 
+# %%
+sns.regplot(
+    data=df_bvoc_emp_daily,
+    x='GreenRatio_mean',
+    y='Total_BVOC_mean'
+)
+r_bvoc, p_bvoc = stats.pearsonr(df_bvoc_emp_daily['GreenRatio_mean'], df_bvoc_emp_daily['Total_BVOC_mean'])
+print(f'BVOC Emission vs Green Ratio\nr = {r_bvoc:.2f}, p = {p_bvoc:.3f}')
+# %% compare insect abundance with BVOC emissions
+# Merge insect data with BVOC data
+insect_bvoc = pd.merge(
+    df_insect_grouped,
+    df_bvoc_emp_daily[['date', 'Total_BVOC_mean']],
+    on='date',
+    how='inner'
+).dropna()
+# Create a figure for regression plot
+fig, ax = plt.subplots(figsize=(8, 6))
+# Regression plot for insect abundance vs BVOC emissions
+sns.regplot(
+    x='Total_BVOC_mean', 
+    y='total_mean', 
+    data=insect_bvoc,
+    scatter_kws={'alpha':0.7, 's':50},
+    line_kws={'color':'red'},
+    ax=ax
+)
+r_bvoc, p_bvoc = stats.pearsonr(insect_bvoc['Total_BVOC_mean'], insect_bvoc['total_mean'])
+ax.set_title(f'Insect Abundance vs BVOC Emissions\nr = {r_bvoc:.2f}, p = {p_bvoc:.3f}')
+ax.set_xlabel('BVOC Emissions ng$\cdot$m$^{-2}$$\cdot$h$^{-1}$')
+ax.set_ylabel('Insect Abundance (mean)')
+# %% Close-up Greenness Ratio vs BVOC emissions
+fig, ax = plt.subplots(figsize=(8, 6))
+sns.regplot(data=df_bvoc_emp, x="GreenRatio", y="Total_BVOC")
+r_bvoc, p_bvoc = stats.pearsonr(df_bvoc_emp.dropna()['GreenRatio'], df_bvoc_emp.dropna()['Total_BVOC'])
+print(f'BVOC Emission vs Close-up Green Ratio\nr = {r_bvoc:.2f}, p = {p_bvoc:.3f}')
 # %%

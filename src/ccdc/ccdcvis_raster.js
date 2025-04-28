@@ -188,3 +188,79 @@ batch.Download.ImageCollection.toDrive(
 // Map.addLayer(imgshow, {bands: ['GCC_predicted'], min: 0, max: 1, palette: palettes.colorbrewer.YlOrRd[9]}, 'GCC_predicted');
 // Map.addLayer(imgshow, {bands: ['GCC'], min: 0, max: 1, palette: palettes.colorbrewer.YlOrRd[9]}, 'GCC');
 // Map.addLayer(imgshow, {bands: ['conditionScore'], min: -4, max: 4, palette: palettes.cmocean.Balance[7]}, 'conditionScore');
+
+// // optional: generating data before ccdc model is trained
+// function getSyntheticForYear(image, date, dateFormat, band, segs) {
+//   var tfit = date
+//   var PI2 = 2.0 * Math.PI
+//   var OMEGAS = [PI2 / 365.25, PI2, PI2 / (1000 * 60 * 60 * 24 * 365.25)]
+//   var omega = OMEGAS[dateFormat];
+//   var imageT = ee.Image.constant([1, tfit,
+//                                 tfit.multiply(omega).cos(),
+//                                 tfit.multiply(omega).sin(),
+//                                 tfit.multiply(omega * 2).cos(),
+//                                 tfit.multiply(omega * 2).sin(),
+//                                 tfit.multiply(omega * 3).cos(),
+//                                 tfit.multiply(omega * 3).sin()]).float()
+                                
+//   // OLD CODE
+//   // Casting as ee string allows using this function to be mapped
+//   // var selectString = ee.String('.*' + band + '_coef.*')
+//   // var params = getSegmentParamsForYear(image, date) 
+//   //                       .select(selectString)
+//   // return imageT.multiply(params).reduce('sum').rename(band)
+                        
+//   // Use new standard functions instead
+//   var COEFS = ["INTP", "SLP", "COS", "SIN", "COS2", "SIN2", "COS3", "SIN3"]
+//   var newParams = utils.CCDC.getMultiCoefs(image, date, [band], COEFS, false, segs, 'after')
+//   return imageT.multiply(newParams).reduce('sum').rename(band)
+  
+// }
+
+// var day_mosaics_pre = function(date, newlist) {
+//   date = ee.Date(date);
+//   var inputDate = date.format('YYYY-MM-dd');
+//   var dateParams = {inputFormat: 3, inputDate: inputDate, outputFormat: 1};
+//   var formattedDate = utils.Dates.convertDate(dateParams);
+
+//   newlist = ee.List(newlist);
+//   var filtered = hls.filterDate(date, date.advance(dayNum,'day'));
+//   var image = ee.Image(
+//       filtered.mean().copyProperties(filtered.first()))
+//       .set('system:index', date.format('yyyy-MM-dd'))
+//       .set('system:time_start', filtered.first().get('system:time_start'));
+  
+//   var syntheticImage = getSyntheticForYear(
+//     ccdcImage, formattedDate, 1, 'GCC', 'S1'
+//   ).set('system:time_start', date.millis())
+//    .set('system:index', date.format('yyyy-MM-dd'))
+//    .rename('GCC_predicted');
+
+//   var coefImage = getMultiCoefs(
+//     ccdcImage, formattedDate, bands, ['INTP', 'SLP', 'RMSE'], true, ['S1'], 'after'
+//   ).set('system:time_start', date.millis())
+//    .set('system:index', date.format('yyyy-MM-dd'));
+//   var rmseImage = coefImage.select('GCC_RMSE')
+//   .set('system:time_start', date.millis())
+//    .set('system:index', date.format('yyyy-MM-dd'));
+
+//   var newImage = syntheticImage.addBands(rmseImage).addBands(image);
+
+//   return ee.List(ee.Algorithms.If(filtered.size(), newlist.add(newImage), newlist));
+// };
+
+// var hlsDaily_pre = ee.ImageCollection(ee.List(range.iterate(day_mosaics_pre, ee.List([]))));
+// var imgCollection_pre = hlsDaily_pre.map(scoreCalculation);
+// // Batch export images to Google Drive
+// batch.Download.ImageCollection.toDrive(
+//   imgCollection_pre.select(['GCC_predicted', 'GCC_RMSE', 'GCC', 'conditionScore', 'relativeDeviation']),
+//   'Abisko_pre',
+//   {
+//    crs: proj,
+//    region: roi, 
+//    type: 'double',
+//    scale: 30,
+//    maxPixels: 1e13,
+//    name: 'GCC_Abisko_{system_date}'
+//   }
+// );

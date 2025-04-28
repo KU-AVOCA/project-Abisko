@@ -61,6 +61,7 @@ function bandMath(image) {
     return image.addBands(GCC).copyProperties(image, ['system:time_start']);
 }
 
+
 // Load and process data
 var hlsL = ee.ImageCollection('NASA/HLS/HLSL30/v002')
     .filterBounds(roi)
@@ -120,8 +121,52 @@ var day_synthetic = function(date, newlist) {
   return ee.List(newlist.add(syntheticImage));
 }
 
+function getSyntheticForYear(image, date, dateFormat, band, segs) {
+  var tfit = date
+  var PI2 = 2.0 * Math.PI
+  var OMEGAS = [PI2 / 365.25, PI2, PI2 / (1000 * 60 * 60 * 24 * 365.25)]
+  var omega = OMEGAS[dateFormat];
+  var imageT = ee.Image.constant([1, tfit,
+                                tfit.multiply(omega).cos(),
+                                tfit.multiply(omega).sin(),
+                                tfit.multiply(omega * 2).cos(),
+                                tfit.multiply(omega * 2).sin(),
+                                tfit.multiply(omega * 3).cos(),
+                                tfit.multiply(omega * 3).sin()]).float()
+                                
+  // OLD CODE
+  // Casting as ee string allows using this function to be mapped
+  // var selectString = ee.String('.*' + band + '_coef.*')
+  // var params = getSegmentParamsForYear(image, date) 
+  //                       .select(selectString)
+  // return imageT.multiply(params).reduce('sum').rename(band)
+                        
+  // Use new standard functions instead
+  var COEFS = ["INTP", "SLP", "COS", "SIN", "COS2", "SIN2", "COS3", "SIN3"]
+  var newParams = utils.CCDC.getMultiCoefs(image, date, [band], COEFS, false, segs, 'after')
+  return imageT.multiply(newParams).reduce('sum').rename(band)
+  
+}
+
+var day_synthetic_pre = function(date, newlist) {
+  date = ee.Date(date);
+  var inputDate = date.format('YYYY-MM-dd');
+  var dateParams = {inputFormat: 3, inputDate: inputDate, outputFormat: 1};
+  var formattedDate = utils.Dates.convertDate(dateParams);
+
+  var syntheticImage = getSyntheticForYear(
+    ccdcImage, formattedDate, 1, 'GCC', 'S1'
+  ).set('system:time_start', date.millis())
+   .set('system:index', date.format('yyyy-MM-dd'))
+   .rename('GCC_predicted');
+  
+  newlist = ee.List(newlist);
+
+  return ee.List(newlist.add(syntheticImage));
+}
 
 var syntheticDaily = ee.ImageCollection(ee.List(range.iterate(day_synthetic, ee.List([]))));
+var syntheticDaily_pre = ee.ImageCollection(ee.List(range.iterate(day_synthetic_pre, ee.List([]))));
 
 var imgcollection = syntheticDaily.linkCollection(
   hlsDaily, 'GCC'
@@ -171,7 +216,7 @@ print(chart);
 // print(syntheticDaily, 'syntheticDaily');
 
 // Create a time series chart
-var chart = ui.Chart.image.seriesByRegion({
+var chartPredicted = ui.Chart.image.seriesByRegion({
   imageCollection: syntheticDaily.select('GCC_predicted'),
   regions: roi,
   reducer: ee.Reducer.mean(),
@@ -183,8 +228,20 @@ var chart = ui.Chart.image.seriesByRegion({
   pointSize: 3,
   // seriesProperty: 'system:time_start'
 });
-print(chart);
+print(chartPredicted);
 
+var chartPredictedPre = ui.Chart.image.seriesByRegion({
+  imageCollection: syntheticDaily_pre.select('GCC_predicted'),
+  regions: roi,
+  reducer: ee.Reducer.mean(),
+  scale: 30,
+  xProperty: 'system:time_start'
+}).setOptions({
+  title: 'Synthetic GCC Time Series (Pre)',
+  lineWidth: 1,
+  pointSize: 3,
+});
+print(chartPredictedPre);
 // Create a time series chart for the original data
 var chartOriginal = ui.Chart.image.seriesByRegion({
   imageCollection: hls.select('GCC'),
