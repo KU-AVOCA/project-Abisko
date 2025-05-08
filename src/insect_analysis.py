@@ -162,6 +162,7 @@ df_bvoc['day'] = df_bvoc['date'].dt.day
 df_bvoc['doys'] = df_bvoc['date'].dt.dayofyear
 
 df_bvoc_emp = df_bvoc[df_bvoc['Species'] == 'Emp.']
+df_bvoc_emp = df_bvoc_emp[df_bvoc_emp['Plot_ID'] == 'E1']
 # Group BVOC data by date to get daily means and standard deviations
 df_bvoc_emp_daily = df_bvoc_emp.groupby(['date']).agg({
     'Total_BVOC': ['mean', 'std', 'count'],
@@ -245,7 +246,7 @@ sns.scatterplot(
     x='date',
     y='Total_BVOC_mean',
     ax=ax5,
-    label='Emp. BVOC (mean)',
+    label='Emp. BVOC',
     color="#205a62",
     marker='s'
 )
@@ -399,11 +400,11 @@ ax.set_ylabel('Green Chromatic Coordinate (GCC)')
 
 # %%
 sns.regplot(
-    data=df_bvoc_emp_daily,
+    data=df_bvoc_emp_daily.dropna(subset=['GreenRatio_mean']),
     x='GreenRatio_mean',
     y='Total_BVOC_mean'
 )
-r_bvoc, p_bvoc = stats.pearsonr(df_bvoc_emp_daily['GreenRatio_mean'], df_bvoc_emp_daily['Total_BVOC_mean'])
+r_bvoc, p_bvoc = stats.pearsonr(df_bvoc_emp_daily.dropna(subset=['GreenRatio_mean'])['GreenRatio_mean'], df_bvoc_emp_daily.dropna(subset=['GreenRatio_mean'])['Total_BVOC_mean'])
 print(f'BVOC Emission vs Green Ratio\nr = {r_bvoc:.2f}, p = {p_bvoc:.3f}')
 # %% compare insect abundance with BVOC emissions
 # Merge insect data with BVOC data

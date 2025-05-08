@@ -1,9 +1,9 @@
 var palettes = require('users/gena/packages:palettes');
 
-var resultsPath ='projects/ku-gem/assets/ccdcAbisko2014-2021';
+var resultsPath ='projects/ku-avoca/assets/ccdcAbisko2014-2021';
 
 // Obtain water mask from RC Global Surface Water Mapping Layers
-var waterMask = ee.Image('JRC/GSW1_3/GlobalSurfaceWater')
+var waterMask = ee.Image('JRC/GSW1_4/GlobalSurfaceWater')
     .select('max_extent').eq(0);
 
 var ccdResults = ee.Image(resultsPath).updateMask(waterMask);

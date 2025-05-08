@@ -122,7 +122,7 @@ var day_mosaics = function(date, newlist) {
 var hlsDaily = ee.ImageCollection(ee.List(range.iterate(day_mosaics, ee.List([]))));
 
 // Load the CCDC results
-var ccdcAsset = ee.Image('projects/ku-gem/assets/ccdcAbisko2014-2021'); // GCC, R, G, B, SWIR1, Tmask applied
+var ccdcAsset = ee.Image('projects/ku-avoca/assets/ccdcAbisko2014-2021'); // GCC, R, G, B, SWIR1, Tmask applied
 var ccdcImage = utils.CCDC.buildCcdImage(ccdcAsset, 1, ['GCC']);
 // create image collection of synthetic images
 

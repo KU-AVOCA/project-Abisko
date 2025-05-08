@@ -109,7 +109,7 @@ var hls = hlsL.merge(hlsS).select(bands);
 // and condition score
 
 // Load the CCDC results
-var ccdcAsset = ee.Image('projects/ku-gem/assets/ccdcAbisko2014-2021'); // GCC, R, G, B, SWIR1, Tmask applied
+var ccdcAsset = ee.Image('projects/ku-avoca/assets/ccdcAbisko2014-2021'); // GCC, R, G, B, SWIR1, Tmask applied
 var ccdcImage = utils.CCDC.buildCcdImage(ccdcAsset, 1, ['GCC']);
 
 // Convert to daily average
