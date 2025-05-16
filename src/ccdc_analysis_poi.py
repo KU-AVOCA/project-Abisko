@@ -1,3 +1,27 @@
+"""
+Analyze CCDC (Continuous Change Detection and Classification) model outputs 
+for the Abisko project's E1 site.
+
+This script processes and visualizes Green Chromatic Coordinate (GCC) data,
+comparing original observations against CCDC model predictions. The analysis
+focuses on identifying deviations between observed and predicted values,
+especially in recent years following the model training period.
+
+The script performs the following operations:
+1. Loads original and CCDC-predicted GCC data
+2. Preprocesses the data (renames columns, converts dates, handles invalid values)
+3. Calculates deviation metrics between observed and predicted values
+4. Creates a three-panel visualization showing:
+    a) Time series of fitted, predicted, and observed GCC values
+    b) Temporal pattern of relative deviations
+    c) Annual average summer relative deviations with anomaly highlighting
+
+The visualization helps identify years with anomalous vegetation conditions
+by comparing observed GCC values against CCDC model predictions based on
+historical patterns.
+
+Shunan Feng (shf@ign.ku.dk)
+"""
 #%%
 import pandas as pd
 import numpy as np

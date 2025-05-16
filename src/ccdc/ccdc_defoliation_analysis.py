@@ -1,4 +1,23 @@
+"""
+CCDC Defoliation Analysis Script
+This script processes daily Green Chromatic Coordinate (GCC) data using Continuous Change Detection 
+and Classification (CCDC) to analyze vegetation defoliation patterns over multiple years.
+The script:
+1. Loads daily GCC TIFF files from a specified directory
+2. Filters data for summer months (June, July, August)
+3. Applies a water mask to exclude non-vegetated areas
+4. Extracts Condition Score (CS) and Relative Deviation (RD) data from each TIFF
+5. Calculates annual means of CS and RD for each pixel
+6. Saves the annual means as numpy arrays for further analysis
+The output consists of two numpy arrays:
+- rd_annual.npy: Annual means of Relative Deviation (measure of deviation from expected GCC)
+- cs_annual.npy: Annual means of Condition Score (measure of vegetation condition)
+These outputs can be used to analyze inter-annual patterns in vegetation health and defoliation events.
+
+Shunan Feng (shf@ign.ku.dk)
+"""
 #%%
+
 import pandas as pd
 import numpy as np
 import glob

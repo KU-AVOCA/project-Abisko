@@ -1,3 +1,9 @@
+'''
+Test script to visualize the drone images and calculate the statistics
+for the relative difference.
+
+Shunan Feng (shf@ign.ku.dk)
+'''
 #%%
 # import pandas as pd
 import numpy as np

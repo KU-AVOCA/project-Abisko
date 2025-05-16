@@ -1,3 +1,25 @@
+'''
+This script processes time-lapse image data from a tower camera to analyze seasonal changes
+in vegetation greenness (phenology) at the Abisko site. It performs the following steps:
+
+1. Loads green ratio data extracted from RGB images, with support for multiple camera orientations.
+2. Filters out images taken during night or low-light conditions using solar elevation calculations (via pvlib).
+3. Focuses analysis on west-facing camera images, removing overexposed images after a specified date.
+4. Aggregates green ratio data to daily means.
+5. Smooths the daily green ratio time series using the Savitzky-Golay filter to reduce noise.
+6. Detects key phenological dates for each year using derivative analysis on the smoothed signal:
+    - Start of Season (SOS): Date of maximum positive rate of change (green-up).
+    - Peak of Season (POS): Date of maximum greenness.
+    - End of Season (EOS): Date of maximum negative rate of change (senescence).
+7. Visualizes the results:
+    - Time series plots of raw and smoothed green ratio data, with detected phenology dates annotated.
+    - Day-of-year (DOY) plots for interannual comparison.
+    - Optional: Derivative plots for a selected year to inspect detection logic.
+8. Outputs summary tables and optionally saves results and figures.
+
+
+Shunan Feng (shf@ign.ku.dk)
+'''
 #%%
 import pandas as pd
 import numpy as np

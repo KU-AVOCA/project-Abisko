@@ -217,7 +217,7 @@ ax2.set(
 
 # Second subplot: Tower greenness ratio with insect abundance
 sns.lineplot(data=west_df, x='date', y='green_ratio', ax=ax3, label='Time-lapse Greenness Ratio', color="#205a62")
-sns.scatterplot(data=df_bvoc_emp_daily, x='date', y='GreenRatio_mean', ax=ax3, label='Close-up Greenness Ratio (mean)', color="#205a62", marker='x')
+sns.scatterplot(data=df_bvoc_emp_daily, x='date', y='GreenRatio_mean', ax=ax3, label='Close-up Greenness Ratio', color="#205a62", marker='x')
 ax4 = ax3.twinx()
 ax4.grid(False)
 # Plot insect abundance data with error bars on second subplot

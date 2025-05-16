@@ -1,3 +1,30 @@
+"""
+Analyzes and visualizes defoliation patterns using remote sensing data.
+This script performs the following main operations:
+1.  Loads annual remote sensing data (presumably a vegetation index or similar)
+    and calculates its standard deviation over time.
+2.  For selected years (2013, 2014, 2021-2024), it processes the data to
+    highlight significant negative deviations (potential defoliation). This involves:
+    - Filtering out values with absolute deviations less than the overall standard deviation.
+    - Retaining only negative deviations.
+    - Applying a water mask to exclude water bodies.
+3.  Visualizes the processed defoliation data for these selected years on a 3x2
+    grid of maps. Each map includes:
+    - The defoliation intensity raster.
+    - A basemap for geographical context.
+    - A Point of Interest (POI) marker.
+    - A common colorbar indicating defoliation intensity.
+4.  Calculates annual defoliation statistics for the period 2013-2024:
+    - Mean defoliation intensity.
+    - Standard deviation of defoliation intensity.
+    - Defoliation extent (ratio of defoliated pixels to total non-water pixels).
+5.  Generates two summary plots:
+    - A boxplot showing the distribution of defoliation intensity for each year.
+    - A barplot showing the annual defoliation extent, with bars colored by
+      the mean defoliation intensity for that year.
+
+Shunan Feng (shf@ign.ku.dk)
+"""
 #%%
 import pandas as pd
 import numpy as np
