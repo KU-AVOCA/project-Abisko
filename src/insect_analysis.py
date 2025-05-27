@@ -160,6 +160,8 @@ df_bvoc['year'] = df_bvoc['date'].dt.year
 df_bvoc['month'] = df_bvoc['date'].dt.month
 df_bvoc['day'] = df_bvoc['date'].dt.day
 df_bvoc['doys'] = df_bvoc['date'].dt.dayofyear
+# change units of Total_BVOC from ng m-2 h-1 to ug m-2 h-1
+df_bvoc['Total_BVOC'] = df_bvoc['Total_BVOC'] / 1000  # convert ng to ug
 
 df_bvoc_emp = df_bvoc[df_bvoc['Species'] == 'Emp.']
 df_bvoc_emp = df_bvoc_emp[df_bvoc_emp['Plot_ID'] == 'E1']
@@ -264,7 +266,7 @@ ax6.errorbar(
 )
 ax5.set(
     xlabel='Date',
-    ylabel=r'BVOC Emissions ng$\cdot$m$^{-2}$$\cdot$h$^{-1}$',
+    ylabel=r'BVOC Emissions $\mu$g$\cdot$m$^{-2}$$\cdot$h$^{-1}$',
     xlim=(pd.to_datetime("2021-01-01"), pd.to_datetime("2023-12-31")),
 )
     
