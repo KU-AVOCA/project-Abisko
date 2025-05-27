@@ -264,7 +264,7 @@ ax6.annotate("E1", xy=(poi.geometry.x[0], poi.geometry.y[0]),
              color="black")
 
 # Add colorbar for all subplots at the bottom
-cbar_ax = fig.add_axes([0.15, 0.02, 0.7, 0.02])  # [left, bottom, width, height]
+cbar_ax = fig.add_axes([0.15, -0.01, 0.7, 0.02])  # [left, bottom, width, height]
 norm = plt.Normalize(vmin=-1, vmax=0)
 cmap = cmcrameri.cm.lajolla
 sm = plt.cm.ScalarMappable(norm=norm, cmap=cmap)

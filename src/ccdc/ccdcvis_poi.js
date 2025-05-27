@@ -188,9 +188,19 @@ var allObs = imgcollection.map(function(image) {
 }
 );
 
-var timeSeries = ee.Feature(null, allObs);
+// Create a feature collection with time series data
+var timeSeriesCollection = allObs.map(function(image) {
+  return ee.Feature(null, {
+    'date': ee.Date(image.get('system:time_start')).format('YYYY-MM-dd'),
+    'GCC': image.get('GCC'),
+    'GCC_predicted': image.get('GCC_predicted'),
+    'timestamp': image.get('system:time_start')
+  });
+});
+
+// Export the time series data to Google Drive
 Export.table.toDrive({
-  collection: timeSeries,
+  collection: timeSeriesCollection,
   description: 'E1_GCC_GCC_predicted_2013_2024',
   folder: 'Abisko',
   fileFormat: 'CSV'
