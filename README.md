@@ -12,7 +12,7 @@ The data preparation section includes scripts for downloading and processing the
 3. **Drone**: Drone images of the sampling area.
 4. **Satellite**: Harmonized Landsat and Sentinel-2 (HLS) data covering the Abisko region.
 
-Data and processed results are available in KU ERDA repository: [AVOCA/Supplementary4manuscript_2025_Abisko_Defoliation](https://sid.erda.dk/sharelink/FdZUYpOVD9).
+Data and processed results are available in KU ERDA repository: [AVOCA/Supplementary4manuscript_2025_Abisko_Defoliation](https://erda.ku.dk/archives/ea08b4082c8c4c817bee04aabce831a3/published-archive.html).
 HLS data are available on Google Earth Engine (GEE). 
 
 The code for downloading and processing the data is organized into different steps:
@@ -48,3 +48,7 @@ The data analysis section includes scripts for analyzing the data and generating
 - [src/insect_analysis.py](src/insect_analysis.py): This step focuses on the insect abundance data and the interactions with other parameters including HLS GCC derived defoliation intensity, time-lapse and close up images derived Greenness Ration, and total BVOC emmissions. This script corresponds to Fig.3 in the paper.
 - [src/defoliation_analysis.py](src/defoliation_analysis.py): This step focuses on the defoliation mapping. It plots the annual summer defoliation intensity from 2013 to 2024. This script corresponds to Fig.5 in the paper.
 - Other figures (Fig.1, Fig.4, and Fig.6) were produced using QGIS or inkscape, and are not included in this repository. There are also some exploratory scripts that are not included in the paper, but are available in the `src` folder.
+
+## References
+The manuscript is current submitted for peer review. The reference will be updated once the paper is accepted.
+If you use this code or data in your research, please cite the following paper and data repository:
