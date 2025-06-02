@@ -1,4 +1,7 @@
 # Multi-source Remote Sensing of Insect Defoliation Events in Abisko from Point to Regional Scales
+
+[![DOI](https://zenodo.org/badge/DOI/10.17894/ucph.f4e625a2-2986-4bba-b96c-ddcba1127dc8.svg)](https://doi.org/10.17894/ucph.f4e625a2-2986-4bba-b96c-ddcba1127dc8)
+
 This repository contains the code and data for the paper "Multi-source Remote Sensing of Insect Defoliation Events in Abisko from Point to Regional Scales".
 A web application [defoliation detector](https://ku-avoca.projects.earthengine.app/view/defoliationdetector) is available at [https://ku-avoca.projects.earthengine.app/view/defoliationdetector](https://ku-avoca.projects.earthengine.app/view/defoliationdetector) for inspecting defoliation events in Abisko region. We hope to expand the web application to larger areas in the future.
 
@@ -52,3 +55,13 @@ The data analysis section includes scripts for analyzing the data and generating
 ## References
 The manuscript is current submitted for peer review. The reference will be updated once the paper is accepted.
 If you use this code or data in your research, please cite the following paper and data repository:
+
+```bibtex
+@misc{abisko2025supplementary,
+    author = {Shunan Feng and Simon Nyboe Laursen and Amy Smart and Katrine Stadsholt Sørensen and Monika Lund Jensen and Federico Calamita and Mads Lykke Dømgaard and Riikka Rinnan and Andreas Westergaard-Nielsen},
+    doi = {10.17894/ucph.f4e625a2-2986-4bba-b96c-ddcba1127dc8},
+    title = {Supplementary Data and Material for Multi-source Remote Sensing of Insect Defoliation Events in Abisko from Point to Regional Scales},
+    url = {http://doi.org/10.17894/ucph.f4e625a2-2986-4bba-b96c-ddcba1127dc8},
+    year = {2025}
+}
+```
