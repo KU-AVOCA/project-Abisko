@@ -1,6 +1,7 @@
 # Multi-source Remote Sensing of Insect Defoliation Events in Abisko from Point to Regional Scales
 
 [![DOI](https://zenodo.org/badge/DOI/10.17894/ucph.f4e625a2-2986-4bba-b96c-ddcba1127dc8.svg)](https://doi.org/10.17894/ucph.f4e625a2-2986-4bba-b96c-ddcba1127dc8)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.15574974.svg)](https://doi.org/10.5281/zenodo.15574974)
 
 This repository contains the code and data for the paper "Multi-source Remote Sensing of Insect Defoliation Events in Abisko from Point to Regional Scales".
 A web application [defoliation detector](https://ku-avoca.projects.earthengine.app/view/defoliationdetector) is available at [https://ku-avoca.projects.earthengine.app/view/defoliationdetector](https://ku-avoca.projects.earthengine.app/view/defoliationdetector) for inspecting defoliation events in Abisko region. We hope to expand the web application to larger areas in the future.
@@ -58,10 +59,19 @@ If you use this code or data in your research, please cite the following paper a
 
 ```bibtex
 @misc{abisko2025supplementary,
-    author = {Shunan Feng and Simon Nyboe Laursen and Amy Smart and Katrine Stadsholt Sørensen and Monika Lund Jensen and Federico Calamita and Mads Lykke Dømgaard and Riikka Rinnan and Andreas Westergaard-Nielsen},
-    doi = {10.17894/ucph.f4e625a2-2986-4bba-b96c-ddcba1127dc8},
-    title = {Supplementary Data and Material for Multi-source Remote Sensing of Insect Defoliation Events in Abisko from Point to Regional Scales},
+    title = {{Supplementary Data and Material for Multi-source Remote Sensing of Insect Defoliation Events in Abisko from Point to Regional Scales}},
+    year = {2025},
+    author = {Feng, Shunan and Laursen, Simon Nyboe and Smart, Amy and S{\o}rensen, Katrine Stadsholt and Jensen, Monika Lund and Calamita, Federico and D{\o}mgaard, Mads Lykke and Rinnan, Riikka and Westergaard-Nielsen, Andreas},
     url = {http://doi.org/10.17894/ucph.f4e625a2-2986-4bba-b96c-ddcba1127dc8},
-    year = {2025}
+    doi = {10.17894/ucph.f4e625a2-2986-4bba-b96c-ddcba1127dc8}
+}
+@misc{abisko2025github,
+    title = {{KU-AVOCA/project-Abisko: Multi-source Remote{\\\}Sensing of Insect Defoliation Events in Abisko{\\\}from Point to Regional Scales{\\\}}},
+    year = {2025},
+    author = {Feng, Shunan and Laursen, Simon Nyboe and Smart, Amy and S{\o}rensen, Katrine Stadsholt and Jensen, Monika Lund and Grillini, Federico and Rieksta, Jolanta and Jiao, Yi and Rinnan, Riikka and Westergaard-Nielsen, Andreas},
+    month = {6},
+    publisher = {Zenodo},
+    url = {https://doi.org/10.5281/zenodo.15574974},
+    doi = {10.5281/zenodo.15574974}
 }
 ```
