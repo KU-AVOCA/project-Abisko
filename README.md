@@ -16,7 +16,7 @@ The data preparation section includes scripts for downloading and processing the
 3. **Drone**: Drone images of the sampling area.
 4. **Satellite**: Harmonized Landsat and Sentinel-2 (HLS) data covering the Abisko region.
 
-Data and processed results are available in KU ERDA repository: [AVOCA/Supplementary4manuscript_2025_Abisko_Defoliation](https://erda.ku.dk/archives/ea08b4082c8c4c817bee04aabce831a3/published-archive.html).
+Data and processed results are available in KU ERDA repository: [AVOCA/Supplementary4manuscript_2025_Abisko_Defoliation](https://doi.org/10.17894/ucph.f4e625a2-2986-4bba-b96c-ddcba1127dc8).
 HLS data are available on Google Earth Engine (GEE). 
 
 The code for downloading and processing the data is organized into different steps:
@@ -57,6 +57,7 @@ The data analysis section includes scripts for analyzing the data and generating
 The manuscript is current submitted for peer review. The reference will be updated once the paper is accepted.
 If you use this code or data in your research, please cite the following paper and data repository:
 
+Bibtex entries:
 ```bibtex
 @misc{abisko2025supplementary,
     title = {{Supplementary Data and Material for Multi-source Remote Sensing of Insect Defoliation Events in Abisko from Point to Regional Scales}},
@@ -66,7 +67,7 @@ If you use this code or data in your research, please cite the following paper a
     doi = {10.17894/ucph.f4e625a2-2986-4bba-b96c-ddcba1127dc8}
 }
 @misc{abisko2025github,
-    title = {{KU-AVOCA/project-Abisko: Multi-source Remote{\\\}Sensing of Insect Defoliation Events in Abisko{\\\}from Point to Regional Scales{\\\}}},
+    title = {{KU-AVOCA/project-Abisko: Multi-source Remote Sensing of Insect Defoliation Events in Abisko from Point to Regional Scales }},
     year = {2025},
     author = {Feng, Shunan and Laursen, Simon Nyboe and Smart, Amy and S{\o}rensen, Katrine Stadsholt and Jensen, Monika Lund and Grillini, Federico and Rieksta, Jolanta and Jiao, Yi and Rinnan, Riikka and Westergaard-Nielsen, Andreas},
     month = {6},
@@ -74,4 +75,11 @@ If you use this code or data in your research, please cite the following paper a
     url = {https://doi.org/10.5281/zenodo.15574974},
     doi = {10.5281/zenodo.15574974}
 }
+```
+
+Harvard style citations:
+```markdown
+Feng, S., Laursen, S. N., Smart, A., Sørensen, K. S., Jensen, M. L., Grillini, F., Rieksta, J., Jiao, Y., Rinnan, R., & Westergaard-Nielsen, A. (2025). KU-AVOCA/project-Abisko: Multi-source Remote Sensing of Insect Defoliation Events in Abisko from Point to Regional Scales. Zenodo. https://doi.org/10.5281/zenodo.15574974
+
+Feng, S., Laursen, S. N., Smart, A., Sørensen, K. S., Jensen, M. L., Calamita, F., Dømgaard, M. L., Rinnan, R., & Westergaard-Nielsen, A. (2025). Supplementary Data and Material for Multi-source Remote Sensing of Insect Defoliation Events in Abisko from Point to Regional Scales. https://doi.org/10.17894/ucph.f4e625a2-2986-4bba-b96c-ddcba1127dc8
 ```
