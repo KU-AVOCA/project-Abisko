@@ -147,69 +147,82 @@ def determine_threshold_kmeans(img, n_clusters=2):
     return threshold
 
 
-def remove_outliers_mad(df, column='threshold', threshold_factor=3.5):
+def remove_outliers_mad(df, column='threshold'):
     """
-    Remove outliers using Median Absolute Deviation (MAD) method.
-    More robust than IQR for skewed distributions.
+    Remove outliers using Median Absolute Deviation from scipy.stats - more robust than IQR
+    """
     
-    Args:
-        df: DataFrame with threshold values
-        column: Column name containing threshold values
-        threshold_factor: Number of MADs to use as cutoff (default: 3.5)
-        
-    Returns:
-        DataFrame: Filtered DataFrame without outliers
-    """
     median = df[column].median()
-    mad = np.median(np.abs(df[column] - median))
-    mad_scaled = mad * 1.4826  # Scale factor for normal distribution
+    # Calculate MAD using scipy.stats
+    mad = stats.median_abs_deviation(df[column], scale=1)
+
+    q75_scale = 1 / df[column].quantile(0.75)
+    
+    # Scale factor for normal distribution (1.4826 for normal distribution)
+    mad_scaled = mad * 1.4826 #q75_scale #
     
     # Define bounds
-    lower_bound = median - threshold_factor * mad_scaled
-    upper_bound = median + threshold_factor * mad_scaled
+    lower_bound = median - mad_scaled
+    upper_bound = median + mad_scaled
     
     print(f"MAD bounds: {lower_bound:.4f} to {upper_bound:.4f}")
+    print(f"Q75: {df[column].quantile(0.75)}")
+    print(f"Q25: {df[column].quantile(0.25)}")
     
     # Filter dataframe
-    filtered_df = df[(df[column] >= lower_bound) & (df[column] <= upper_bound)]
+    filtered_df = df[(df[column] > lower_bound) & (df[column] < upper_bound)]
     print(f"Removed {len(df) - len(filtered_df)} outliers using MAD method")
     
     return filtered_df
 
-#%%
-# Sample a subset of images for threshold determination (to speed up processing)
-# You can adjust sample_size or set to None to process all images
-sample_size = 500  # Set to None to process all images
-if sample_size and len(imfiles) > sample_size:
-    import random
-    random.seed(42)
-    imfiles_sample = random.sample(imfiles, sample_size)
-    print(f"Processing {len(imfiles_sample)} sampled images")
-else:
-    imfiles_sample = imfiles
-    print(f"Processing all {len(imfiles_sample)} images")
 
 #%%
 data = []
-for i in tqdm.tqdm(imfiles_sample, desc="Processing images"):
+for i in tqdm.tqdm(imfiles, desc="Processing images"):
     img = cv2.imread(i)
-    if img is None:
-        print(f"Could not read image: {i}")
-        continue
-    
     print("processing: ", i)
 
-    # Determine threshold using Otsu's method
+    # Quantify vegetation within the whole image
     threshold = determine_threshold_otsu(img)
-    # Alternative: use K-means
     # threshold = determine_threshold_kmeans(img, n_clusters=2)
-    
     print(f"Threshold determined: {threshold:.4f}")
     ratio, green_mask = quantify_vegetation(img, threshold)
 
     if ratio is not None:
         print(f"The green pixel ratio is: {ratio:.4f}")
         data.append({'filename': i, 'green_ratio': ratio, 'threshold': threshold})
+
+        # Apply the green mask to the image
+        masked_img = cv2.bitwise_and(img, img, mask=green_mask)
+
+        # Display the original image and the masked image
+        # Convert the images to RGB format for matplotlib
+        img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        masked_img_rgb = cv2.cvtColor(masked_img, cv2.COLOR_BGR2RGB)
+
+        # Create a figure and axes
+        fig, axes = plt.subplots(1, 2, figsize=(10, 5))
+
+        # Display the original image
+        axes[0].imshow(img_rgb)
+        axes[0].set_title("Original Image")
+        axes[0].axis('off')  # Hide the axes
+
+        # Display the masked image
+        axes[1].imshow(masked_img_rgb)
+        axes[1].set_title("Green Masked Image")
+        axes[1].axis('off')  # Hide the axes
+
+        plt.tight_layout()  # Adjust layout to prevent overlapping titles
+        # plt.show()
+
+        # Save the figure
+        # Extract base filename and extension
+        base_filename = os.path.splitext(os.path.basename(i))[0]
+        extension = os.path.splitext(os.path.basename(i))[1]
+        # Save the figure
+        fig.savefig(os.path.join(imoutfolder, f"{base_filename}_green_masked{extension}"))
+
     else:
         print("Vegetation quantification failed.")
         data.append({'filename': i, 'green_ratio': None, 'threshold': None})
