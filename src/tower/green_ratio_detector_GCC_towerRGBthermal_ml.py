@@ -1,43 +1,48 @@
-'''
-Enhanced Green Ratio Detector for Vegetation Analysis with Machine Learning Classification
+"""
+Green Ratio Detector for Vegetation Analysis with Machine Learning Classification
 
-This script processes a collection of time-lapse images to quantify vegetation coverage and 
-separate different vegetation types (likely trees and understory plants) using advanced 
-machine learning techniques.
+This script processes time-lapse RGB and thermal images to quantify vegetation coverage and
+separate different vegetation types (e.g., trees and understory) using machine learning methods.
 
-The script:
-1. Recursively searches for images in the specified directory
-2. Extracts datetime metadata from each image
-3. Processes each image to detect green vegetation based on a GCC threshold
-4. Separates green vegetation into two classes using a selected ML method:
-   - K-means clustering (default)
-   - Gaussian Mixture Models (GMM)
-   - DBSCAN spatial clustering
-   - Spectral clustering
-5. Calculates ratios for total green vegetation and each vegetation class
-6. Creates visual comparisons showing the original image, green mask, and classified vegetation
-7. Exports results to CSV with datetime info and saves visualizations
+Main features:
+1. Recursively searches for RGB and thermal images in specified directories.
+2. Extracts datetime metadata from image EXIF (RGB) and filenames (.mat thermal).
+3. Matches each RGB image to the closest-in-time thermal image.
+4. Crops images to a region of interest and applies a buffer to avoid edge artifacts.
+5. Detects green vegetation using the GCC index and a threshold.
+6. Separates green vegetation into two classes using a selected ML method:
+    - K-means clustering (default, in LAB color space)
+    - Gaussian Mixture Models (GMM)
+    - DBSCAN (color + spatial clustering)
+    - Spectral clustering
+7. Calculates ratios, means, and standard deviations for total green vegetation and each class,
+    including corresponding thermal statistics.
+8. Saves results to a CSV file and visualizes original, masked, classified, and thermal images.
 
 Dependencies:
-- OpenCV (cv2): For image processing
-- NumPy: For numerical operations
-- Matplotlib: For visualization
-- scikit-learn: For machine learning algorithms
-- tqdm: For progress tracking
-- PIL: For extracting image metadata
+- OpenCV (cv2)
+- NumPy
+- Matplotlib
+- scikit-learn
+- tqdm
+- PIL (Pillow)
+- pandas
+- seaborn
+- cmocean
+- scipy.io (for .mat files)
 
 Usage:
-- Set 'imfolder' to the directory containing images
-- Set 'imoutfolder' to the desired output directory
-- Set 'classification_method' to one of: "kmeans", "gmm", "dbscan", "spectral"
-- Run the script to process all images and generate results
+- Set 'rgbfolder' and 'thermalfolder' to the directories containing RGB and thermal images.
+- Set 'imoutfolder' for output.
+- Set 'classification_method' to one of: "kmeans", "gmm", "dbscan", "spectral".
+- Run the script to process all images and generate results.
 
 Output:
-- Comparative visualizations with original, green-masked, and classified images
-- CSV file with green ratio values and class-specific ratios for all processed images
+- Visualizations with original, green-masked, classified, and thermal images.
+- CSV file with green ratio and class-specific statistics for all processed images.
 
-Shunan Feng (shf@ign.ku.dk)
-'''
+Author: Shunan Feng (shf@ign.ku.dk)
+"""
 #%%
 import cv2
 import numpy as np
@@ -47,9 +52,12 @@ import os
 import glob
 import tqdm
 import seaborn as sns
+import pandas as pd
 import datetime
+import cmocean
 from PIL import Image
 from PIL.ExifTags import TAGS
+from scipy.io import loadmat
 
 # Machine learning imports
 from sklearn.mixture import GaussianMixture
@@ -57,24 +65,31 @@ from sklearn.cluster import DBSCAN, SpectralClustering
 from sklearn.preprocessing import StandardScaler
 from sklearn.neighbors import KNeighborsClassifier
 
+
 sns.set_theme(style="darkgrid", font_scale=1.5)
 
 #%%
 # Set the classification method to use
 classification_method = "kmeans"  # Options: "kmeans", "gmm", "dbscan", "spectral"
 
-#%%
-imfolder = '/mnt/i/SCIENCE-IGN-ALL/AVOCA_Group/1_Personal_folders/1_Simon/1_Abisko/6_Tower_Data/Tower RGB images/1 Data/1 Years'
-imfiles = []
-imfiles.extend(glob.glob(os.path.join(imfolder, '**/', '*.JPG'), recursive=True))
-imfiles.extend(glob.glob(os.path.join(imfolder, '**/', '*.jpg'), recursive=True))
-imfiles.extend(glob.glob(os.path.join(imfolder, '**/', '*.JPEG'), recursive=True))
-imfiles.extend(glob.glob(os.path.join(imfolder, '**/', '*.jpeg'), recursive=True))
-imfiles.extend(glob.glob(os.path.join(imfolder, '**/', '*.png'), recursive=True))
-imfiles.extend(glob.glob(os.path.join(imfolder, '**/', '*.PNG'), recursive=True))
-print(f"Found {len(imfiles)} images in {imfolder}")
+#%% load both RGB and thermal images
+rgbfolder = '/mnt/i/SCIENCE-IGN-ALL/AVOCA_Group/1_Personal_folders/1_Simon/1_Abisko/6_Tower_Data/Tower RGB images/1 Data/1 Years'
+imrgbfiles = []
+imrgbfiles.extend(glob.glob(os.path.join(rgbfolder, '**/', '*.JPG'), recursive=True))
+imrgbfiles.extend(glob.glob(os.path.join(rgbfolder, '**/', '*.jpg'), recursive=True))
+imrgbfiles.extend(glob.glob(os.path.join(rgbfolder, '**/', '*.JPEG'), recursive=True))
+imrgbfiles.extend(glob.glob(os.path.join(rgbfolder, '**/', '*.jpeg'), recursive=True))
+imrgbfiles.extend(glob.glob(os.path.join(rgbfolder, '**/', '*.png'), recursive=True))
+imrgbfiles.extend(glob.glob(os.path.join(rgbfolder, '**/', '*.PNG'), recursive=True))
+print(f"Found {len(imrgbfiles)} images in {rgbfolder}")
 
-imoutfolder = '/mnt/i/SCIENCE-IGN-ALL/AVOCA_Group/2_Shared_folders/5_Projects/2025Abisko/Tower RGB images/Data_greenessByShunanOct_' + classification_method + '_mean'
+thermalfolder = '/mnt/i/SCIENCE-IGN-ALL/AVOCA_Group/2_Shared_folders/5_Projects/2025Abisko/Tower thermal images/preview/all/registered'
+imthermalfiles = []
+imthermalfiles.extend(glob.glob(os.path.join(thermalfolder, '**/', '*.mat'), recursive=True))
+print(f"Found {len(imthermalfiles)} thermal .mat files in {thermalfolder}")
+
+imoutfolder = '/mnt/i/SCIENCE-IGN-ALL/AVOCA_Group/2_Shared_folders/5_Projects/2025Abisko/Tower_RGB_Thermal_Analysis/Data_greenes_thermal_' + classification_method + '_mean'
+# Create the output directory if it doesn't exist
 if not os.path.exists(imoutfolder):
     os.makedirs(imoutfolder)
 #%%
@@ -84,11 +99,11 @@ if not os.path.exists(results_dir):
     os.makedirs(results_dir)
 
 # Initialize the CSV file with headers
-csv_path = os.path.join(results_dir, 'green_ratio_' + classification_method + '.csv')
+csv_path = os.path.join(results_dir, 'green_ratio_thermal_' + classification_method + '.csv')
 with open(csv_path, 'w') as f:
-    f.write('filename,datetime,green_ratio,green_mean,green_std,green_norm,class1_ratio,class1_mean,class1_std,class1_norm,class2_ratio,class2_mean,class2_std,class2_norm,method\n')
+    f.write('filename,datetime,green_ratio,green_mean,green_std,green_norm,class1_ratio,class1_mean,class1_std,class1_norm,class2_ratio,class2_mean,class2_std,class2_norm,class1_temp_mean,class1_temp_std,class2_temp_mean,class2_temp_std,time_diff_sec,method\n')
 #%%
-def get_image_datetime(image_path):
+def get_image_rgb_datetime(image_path):
     """
     Extract the datetime when the image was taken from EXIF metadata.
     
@@ -130,9 +145,70 @@ def get_image_datetime(image_path):
     except Exception as e:
         print(f"Error extracting metadata from {image_path}: {e}")
         return None
+
+#%%
+def get_image_thermal_datetime(image_path):
+    """
+    Extract the datetime when the thermal image was taken from .mat filename.
     
+    Args:
+        image_path: Path to the .mat file   
+    Returns:
+        str: Datetime string in ISO format (YYYY-MM-DD HH:MM:SS) or None if not available
+    """
+    try:
+        # Extract filename without extension
+        base_name = os.path.basename(image_path)
+        name, _ = os.path.splitext(base_name)
+        
+        # Assuming the filename contains datetime in format 'prefix_YYYY-MM-DD_HH.MM.SS.mat'
+        parts = name.split('_')
+        
+        try :
+            date_part = parts[-2]  # 'YYYY-MM-DD'
+            time_part = parts[-1]  # 'HH.MM.SS'
+            time_part = time_part.replace('.', ':')  # Replace '.' with ':'
+            datetime_str = f"{date_part} {time_part}"
+            
+            # Validate and return in ISO format
+            dt = datetime.datetime.strptime(datetime_str, '%Y-%m-%d %H:%M:%S')
+            return dt.strftime('%Y-%m-%d %H:%M:%S')
+        except ValueError:
+            return None
+    except Exception as e:
+        print(f"Error extracting datetime from {image_path}: {e}")
+        return None
+
+#%% mask and crop the image to the area of interest    
+def mask_and_crop_image(img):
+    """
+    Crop the image to remove mismatches and edge effects.
+
+    - Crops the image to the first 800 rows to match the region of interest.
+    - Applies a 50-pixel buffer on all sides to avoid edge artifacts.
+
+    Args:
+        img (np.ndarray): Input image (BGR or grayscale).
+
+    Returns:
+        np.ndarray: Cropped image.
+    """
+    crop_top = 800
+    buffer = 50
+
+    # Crop to first 800 rows
+    img = img[:crop_top]
+
+    # Apply buffer to all sides
+    if img.ndim == 3:
+        img = img[buffer:-buffer, buffer:-buffer, :]
+    else:
+        img = img[buffer:-buffer, buffer:-buffer]
+
+    return img
+
 #%%    
-def quantify_vegetation_kmeans(img):
+def quantify_vegetation_kmeans(img_rgb, img_thermal):
     """
     Quantifies green vegetation using K-means clustering.
     
@@ -151,7 +227,7 @@ def quantify_vegetation_kmeans(img):
     """
     try:
         # Split the image into its BGR channels
-        b, g, r = cv2.split(img)
+        b, g, r = cv2.split(img_rgb)
         
         # Convert to float to avoid integer division
         b = b.astype(float)
@@ -168,7 +244,7 @@ def quantify_vegetation_kmeans(img):
         
         # Count green pixels and calculate ratio
         green_pixels = np.sum(green_mask > 0)
-        total_pixels = img.shape[0] * img.shape[1]
+        total_pixels = img_rgb.shape[0] * img_rgb.shape[1]
         green_ratio = green_pixels / total_pixels if total_pixels > 0 else 0
         
         # Calculate mean and std greenness for all green pixels
@@ -177,23 +253,29 @@ def quantify_vegetation_kmeans(img):
             mean_greenness = np.mean(greenness[green_pixels_mask])
             std_greenness = np.std(greenness[green_pixels_mask])
             norm_greenness = np.sum(greenness[green_pixels_mask]) / green_pixels
+            mean_temperature = np.nanmean(img_thermal[green_pixels_mask])
+            std_temperature = np.nanstd(img_thermal[green_pixels_mask])
         else:
             mean_greenness = 0
             std_greenness = 0
             norm_greenness = 0
-            
+            mean_temperature = np.nan
+            std_temperature = np.nan
+
         # Store overall green metrics as a dictionary
         green_metrics = {
             'ratio': green_ratio,
             'mean': mean_greenness,
             'std': std_greenness,
-            'norm_greenness': norm_greenness
+            'norm_greenness': norm_greenness,
+            'mean_temperature': mean_temperature,
+            'std_temperature': std_temperature
         }
         
         # ENHANCED CLASSIFICATION: Using K-means for vegetation class separation
         
         # Step 1: Create a masked green-only image
-        masked_green = cv2.bitwise_and(img, img, mask=(green_mask // 255).astype(np.uint8))
+        masked_green = cv2.bitwise_and(img_rgb, img_rgb, mask=(green_mask // 255).astype(np.uint8))
         
         # Step 2: Prepare data for K-means clustering - only include green pixels
         non_zero_mask = np.any(masked_green != 0, axis=2)
@@ -201,7 +283,7 @@ def quantify_vegetation_kmeans(img):
         # Initialize class metrics
         class1_metrics = {'ratio': 0, 'mean': 0, 'std': 0, 'norm_greenness': 0}
         class2_metrics = {'ratio': 0, 'mean': 0, 'std': 0, 'norm_greenness': 0}
-        visualization = np.zeros_like(img)
+        visualization = np.zeros_like(img_rgb)
         
         if np.sum(non_zero_mask) > 0:  # Check if there are green pixels
             # Extract features for clustering (using multiple channels for better separation)
@@ -217,7 +299,7 @@ def quantify_vegetation_kmeans(img):
             
             # Create masks for each class
             # First, create a full-size labels array initialized with -1 (no class)
-            full_labels = np.full(img.shape[:2], -1, dtype=int)
+            full_labels = np.full(img_rgb.shape[:2], -1, dtype=int)
             # Then, set the labels only for green pixels
             full_labels[non_zero_mask] = labels.flatten()
             
@@ -236,42 +318,54 @@ def quantify_vegetation_kmeans(img):
             class1_ratio = class1_pixels / total_pixels if total_pixels > 0 else 0
             class2_ratio = class2_pixels / total_pixels if total_pixels > 0 else 0
             
-            # Calculate mean, std, and normalized greenness for each class
+            # Calculate mean, std, and normalized greenness, and mean, std temperature for each class
             if class1_pixels > 0:
                 class1_mean = np.mean(greenness[class1_mask])
                 class1_std = np.std(greenness[class1_mask])
                 class1_norm_greenness = np.sum(greenness[class1_mask]) / class1_pixels
+                class1_mean_temperature = np.nanmean(img_thermal[class1_mask])
+                class1_std_temperature = np.nanstd(img_thermal[class1_mask])
             else:
                 class1_mean = 0
                 class1_std = 0
                 class1_norm_greenness = 0
-                
+                class1_mean_temperature = np.nan
+                class1_std_temperature = np.nan
+
             if class2_pixels > 0:
                 class2_mean = np.mean(greenness[class2_mask])
                 class2_std = np.std(greenness[class2_mask])
                 class2_norm_greenness = np.sum(greenness[class2_mask]) / class2_pixels
+                class2_mean_temperature = np.nanmean(img_thermal[class2_mask])
+                class2_std_temperature = np.nanstd(img_thermal[class2_mask])
             else:
                 class2_mean = 0
                 class2_std = 0
                 class2_norm_greenness = 0
+                class2_mean_temperature = np.nan
+                class2_std_temperature = np.nan
                 
             # Store class metrics
             class1_metrics = {
                 'ratio': class1_ratio,
                 'mean': class1_mean,
                 'std': class1_std,
-                'norm_greenness': class1_norm_greenness
+                'norm_greenness': class1_norm_greenness,
+                'mean_temperature': class1_mean_temperature,
+                'std_temperature': class1_std_temperature
             }
             
             class2_metrics = {
                 'ratio': class2_ratio,
                 'mean': class2_mean,
                 'std': class2_std,
-                'norm_greenness': class2_norm_greenness
+                'norm_greenness': class2_norm_greenness,
+                'mean_temperature': class2_mean_temperature,
+                'std_temperature': class2_std_temperature
             }
             
             # Create a visualization of the two classes
-            visualization = np.zeros_like(img)
+            visualization = np.zeros_like(img_rgb)
             # Class 1 - understory (shown in blue)
             visualization[class1_mask] = [255, 0, 0]
             # Class 2 - trees (shown in green) 
@@ -283,471 +377,404 @@ def quantify_vegetation_kmeans(img):
         print(f"An error occurred: {e}")
         return None, None, None, None, None
 
-def quantify_vegetation_gmm(img):
+def quantify_vegetation_gmm(img_rgb, img_thermal):
     """
     Quantifies vegetation using Gaussian Mixture Models (GMM).
-    
-    GMMs can capture more complex cluster shapes than K-means and provide
-    probability estimates for class membership. This implementation uses
-    HSV color space for better vegetation segmentation.
-    
-    Args:
-        img: The input image (BGR format)
-        
-    Returns:
-        tuple: Overall green metrics (ratio, mean, std, norm_greenness),
-               green mask, 
-               class1 metrics (ratio, mean, std, norm_greenness), 
-               class2 metrics (ratio, mean, std, norm_greenness), 
-               class visualization
+    Uses LAB color space for clustering, similar to kmeans, and includes thermal stats.
     """
     try:
-        # First identify green pixels using GCC as before
-        b, g, r = cv2.split(img)
+        # Split the image into its BGR channels
+        b, g, r = cv2.split(img_rgb)
         b = b.astype(float)
         g = g.astype(float)
         r = r.astype(float)
-        
         greenness = g / (r + g + b + 1e-10)
-        threshold = 0.38 # 0.38 +- 0.01
+        threshold = 0.37
         green_mask = (greenness > threshold).astype(np.uint8) * 255
-        
+
         green_pixels = np.sum(green_mask > 0)
-        total_pixels = img.shape[0] * img.shape[1]
+        total_pixels = img_rgb.shape[0] * img_rgb.shape[1]
         green_ratio = green_pixels / total_pixels if total_pixels > 0 else 0
-        
-        # Calculate mean and std greenness for all green pixels
+
         green_pixels_mask = green_mask > 0
         if green_pixels > 0:
             mean_greenness = np.mean(greenness[green_pixels_mask])
             std_greenness = np.std(greenness[green_pixels_mask])
             norm_greenness = np.sum(greenness[green_pixels_mask]) / green_pixels
+            mean_temperature = np.nanmean(img_thermal[green_pixels_mask])
+            std_temperature = np.nanstd(img_thermal[green_pixels_mask])
         else:
             mean_greenness = 0
             std_greenness = 0
             norm_greenness = 0
-            
-        # Store overall green metrics as a dictionary
+            mean_temperature = np.nan
+            std_temperature = np.nan
+
         green_metrics = {
             'ratio': green_ratio,
             'mean': mean_greenness,
             'std': std_greenness,
-            'norm_greenness': norm_greenness
+            'norm_greenness': norm_greenness,
+            'mean_temperature': mean_temperature,
+            'std_temperature': std_temperature
         }
-        
-        # Initialize class metrics
-        class1_metrics = {'ratio': 0, 'mean': 0, 'std': 0, 'norm_greenness': 0}
-        class2_metrics = {'ratio': 0, 'mean': 0, 'std': 0, 'norm_greenness': 0}
-        visualization = np.zeros_like(img)
-        
-        # Use GMM for classification if we have enough green pixels
+
+        class1_metrics = {'ratio': 0, 'mean': 0, 'std': 0, 'norm_greenness': 0, 'mean_temperature': np.nan, 'std_temperature': np.nan}
+        class2_metrics = {'ratio': 0, 'mean': 0, 'std': 0, 'norm_greenness': 0, 'mean_temperature': np.nan, 'std_temperature': np.nan}
+        visualization = np.zeros_like(img_rgb)
+
         non_zero_mask = green_mask > 0
-        if np.sum(non_zero_mask) > 100:  # Require minimum number of green pixels
-            # Convert to better color space for vegetation analysis
-            masked_green = cv2.bitwise_and(img, img, mask=(green_mask // 255).astype(np.uint8))
-            hsv_image = cv2.cvtColor(masked_green, cv2.COLOR_BGR2HSV)
-            
-            # Prepare data for GMM - extract features from pixels
-            green_pixels_data = hsv_image[non_zero_mask].reshape(-1, 3)
-            
-            # Fit GMM with 2 components
+        if np.sum(non_zero_mask) > 0:
+            masked_green = cv2.bitwise_and(img_rgb, img_rgb, mask=(green_mask // 255).astype(np.uint8))
+            lab_image = cv2.cvtColor(masked_green, cv2.COLOR_BGR2LAB)
+            pixels = lab_image[non_zero_mask].reshape(-1, 3).astype(np.float32)
+
             gmm = GaussianMixture(n_components=2, covariance_type='full', random_state=42)
-            gmm.fit(green_pixels_data)
-            
-            # Predict classes
-            labels = gmm.predict(green_pixels_data)
-            
-            # Create full masks
-            full_labels = np.zeros(img.shape[:2], dtype=int)
-            full_labels[non_zero_mask] = labels + 1  # +1 so background is 0
-            
-            # Determine which class is likely understory vs trees
-            # Using means of H and V channels in HSV to distinguish
-            means = gmm.means_
-            if means[0][0] < means[1][0]:  # Lower hue value = more green-blue
-                class1_mask = full_labels == 1  # Understory (darker)
-                class2_mask = full_labels == 2  # Trees (brighter)
+            labels = gmm.fit_predict(pixels)
+
+            full_labels = np.full(img_rgb.shape[:2], -1, dtype=int)
+            full_labels[non_zero_mask] = labels
+
+            if gmm.means_[0][0] < gmm.means_[1][0]:
+                class1_mask = (full_labels == 0)
+                class2_mask = (full_labels == 1)
             else:
-                class1_mask = full_labels == 2  # Understory (darker)
-                class2_mask = full_labels == 1  # Trees (brighter)
-                
+                class1_mask = (full_labels == 1)
+                class2_mask = (full_labels == 0)
+
             class1_pixels = np.sum(class1_mask)
             class2_pixels = np.sum(class2_mask)
-            
             class1_ratio = class1_pixels / total_pixels if total_pixels > 0 else 0
             class2_ratio = class2_pixels / total_pixels if total_pixels > 0 else 0
-            
-            # Calculate mean, std, and normalized greenness for each class
+
             if class1_pixels > 0:
                 class1_mean = np.mean(greenness[class1_mask])
                 class1_std = np.std(greenness[class1_mask])
                 class1_norm_greenness = np.sum(greenness[class1_mask]) / class1_pixels
+                class1_mean_temperature = np.nanmean(img_thermal[class1_mask])
+                class1_std_temperature = np.nanstd(img_thermal[class1_mask])
             else:
                 class1_mean = 0
                 class1_std = 0
                 class1_norm_greenness = 0
-                
+                class1_mean_temperature = np.nan
+                class1_std_temperature = np.nan
+
             if class2_pixels > 0:
                 class2_mean = np.mean(greenness[class2_mask])
                 class2_std = np.std(greenness[class2_mask])
                 class2_norm_greenness = np.sum(greenness[class2_mask]) / class2_pixels
+                class2_mean_temperature = np.nanmean(img_thermal[class2_mask])
+                class2_std_temperature = np.nanstd(img_thermal[class2_mask])
             else:
                 class2_mean = 0
                 class2_std = 0
                 class2_norm_greenness = 0
-                
-            # Store class metrics
+                class2_mean_temperature = np.nan
+                class2_std_temperature = np.nan
+
             class1_metrics = {
                 'ratio': class1_ratio,
                 'mean': class1_mean,
                 'std': class1_std,
-                'norm_greenness': class1_norm_greenness
+                'norm_greenness': class1_norm_greenness,
+                'mean_temperature': class1_mean_temperature,
+                'std_temperature': class1_std_temperature
             }
-            
             class2_metrics = {
                 'ratio': class2_ratio,
                 'mean': class2_mean,
                 'std': class2_std,
-                'norm_greenness': class2_norm_greenness
+                'norm_greenness': class2_norm_greenness,
+                'mean_temperature': class2_mean_temperature,
+                'std_temperature': class2_std_temperature
             }
-            
-            # Visualization
-            visualization = np.zeros_like(img)
-            visualization[class1_mask] = [255, 0, 0]  # Understory in blue
-            visualization[class2_mask] = [0, 255, 0]  # Trees in green
-            
+
+            visualization = np.zeros_like(img_rgb)
+            visualization[class1_mask] = [255, 0, 0]
+            visualization[class2_mask] = [0, 255, 0]
+
         return green_metrics, green_mask, class1_metrics, class2_metrics, visualization
-        
+
     except Exception as e:
         print(f"An error occurred in GMM clustering: {e}")
         return None, None, None, None, None
-    
-def quantify_vegetation_dbscan(img):
+
+def quantify_vegetation_dbscan(img_rgb, img_thermal):
     """
     Quantifies vegetation using DBSCAN clustering.
-    
-    DBSCAN is particularly good at finding arbitrarily shaped clusters and handling noise.
-    This implementation combines both color and spatial features to account for both
-    appearance and location of vegetation in the image.
-    
-    Args:
-        img: The input image (BGR format)
-        
-    Returns:
-        tuple: Overall green metrics (ratio, mean, std, norm_greenness),
-               green mask, 
-               class1 metrics (ratio, mean, std, norm_greenness), 
-               class2 metrics (ratio, mean, std, norm_greenness), 
-               class visualization
+    Uses LAB color + spatial features, and includes thermal stats.
     """
     try:
-        # Identify green pixels using GCC
-        b, g, r = cv2.split(img)
+        b, g, r = cv2.split(img_rgb)
         b, g, r = b.astype(float), g.astype(float), r.astype(float)
         greenness = g / (r + g + b + 1e-10)
-        threshold = 0.38 # 0.38 +- 0.01
+        threshold = 0.37
         green_mask = (greenness > threshold).astype(np.uint8) * 255
-        
+
         green_pixels = np.sum(green_mask > 0)
-        total_pixels = img.shape[0] * img.shape[1]
+        total_pixels = img_rgb.shape[0] * img_rgb.shape[1]
         green_ratio = green_pixels / total_pixels if total_pixels > 0 else 0
-        
-        # Calculate mean and std greenness for all green pixels
+
         green_pixels_mask = green_mask > 0
         if green_pixels > 0:
             mean_greenness = np.mean(greenness[green_pixels_mask])
             std_greenness = np.std(greenness[green_pixels_mask])
             norm_greenness = np.sum(greenness[green_pixels_mask]) / green_pixels
+            mean_temperature = np.nanmean(img_thermal[green_pixels_mask])
+            std_temperature = np.nanstd(img_thermal[green_pixels_mask])
         else:
             mean_greenness = 0
             std_greenness = 0
             norm_greenness = 0
-            
-        # Store overall green metrics as a dictionary
+            mean_temperature = np.nan
+            std_temperature = np.nan
+
         green_metrics = {
             'ratio': green_ratio,
             'mean': mean_greenness,
             'std': std_greenness,
-            'norm_greenness': norm_greenness
+            'norm_greenness': norm_greenness,
+            'mean_temperature': mean_temperature,
+            'std_temperature': std_temperature
         }
-        
-        # Initialize class metrics
-        class1_metrics = {'ratio': 0, 'mean': 0, 'std': 0, 'norm_greenness': 0}
-        class2_metrics = {'ratio': 0, 'mean': 0, 'std': 0, 'norm_greenness': 0}
-        visualization = np.zeros_like(img)
-        
-        # Apply DBSCAN if enough green pixels
+
+        class1_metrics = {'ratio': 0, 'mean': 0, 'std': 0, 'norm_greenness': 0, 'mean_temperature': np.nan, 'std_temperature': np.nan}
+        class2_metrics = {'ratio': 0, 'mean': 0, 'std': 0, 'norm_greenness': 0, 'mean_temperature': np.nan, 'std_temperature': np.nan}
+        visualization = np.zeros_like(img_rgb)
+
         non_zero_mask = green_mask > 0
         if np.sum(non_zero_mask) > 100:
-            # Get green pixel coordinates and values
             y_coords, x_coords = np.where(non_zero_mask)
-            masked_green = cv2.bitwise_and(img, img, mask=(green_mask // 255).astype(np.uint8))
+            masked_green = cv2.bitwise_and(img_rgb, img_rgb, mask=(green_mask // 255).astype(np.uint8))
             lab_image = cv2.cvtColor(masked_green, cv2.COLOR_BGR2LAB)
-            
-            # Combine color and spatial features (with appropriate weighting)
-            # Adjusting spatial weight increases/decreases importance of pixel position
-            spatial_weight = 0.01  # Can be tuned
+            spatial_weight = 0.01
             features = np.column_stack([
-                lab_image[non_zero_mask],          # Color features
-                x_coords * spatial_weight,         # Spatial X coordinate
-                y_coords * spatial_weight          # Spatial Y coordinate
+                lab_image[non_zero_mask],
+                x_coords * spatial_weight,
+                y_coords * spatial_weight
             ])
-            
-            # Scale features to have unit variance
             scaler = StandardScaler()
             scaled_features = scaler.fit_transform(features)
-            
-            # Apply DBSCAN
             dbscan = DBSCAN(eps=0.5, min_samples=10)
             labels = dbscan.fit_predict(scaled_features)
-            
-            # Get the two largest clusters (ignoring noise = -1)
             unique_labels = np.unique(labels)
-            unique_labels = unique_labels[unique_labels >= 0]  # Remove noise
-            
+            unique_labels = unique_labels[unique_labels >= 0]
             if len(unique_labels) >= 2:
-                # Count pixels in each cluster
                 counts = np.array([np.sum(labels == label) for label in unique_labels])
-                
-                # Get the two largest clusters
                 largest_indices = np.argsort(counts)[-2:]
-                class1_label = unique_labels[largest_indices[1]]  # Largest cluster
-                class2_label = unique_labels[largest_indices[0]]  # Second largest
-                
-                # Create full mask for visualization
+                class1_label = unique_labels[largest_indices[1]]
+                class2_label = unique_labels[largest_indices[0]]
                 class1_indices = np.where(labels == class1_label)[0]
                 class2_indices = np.where(labels == class2_label)[0]
-                
-                # Map back to original coordinates
                 y1, x1 = y_coords[class1_indices], x_coords[class1_indices]
-                y2, x2 = y_coords[class2_indices]
-                
-                # Create masks
-                class1_mask = np.zeros(img.shape[:2], dtype=bool)
-                class2_mask = np.zeros(img.shape[:2], dtype=bool)
+                y2, x2 = y_coords[class2_indices], x_coords[class2_indices]
+                class1_mask = np.zeros(img_rgb.shape[:2], dtype=bool)
+                class2_mask = np.zeros(img_rgb.shape[:2], dtype=bool)
                 class1_mask[y1, x1] = True
                 class2_mask[y2, x2] = True
-                
-                # Calculate ratios
+
                 class1_pixels = np.sum(class1_mask)
                 class2_pixels = np.sum(class2_mask)
                 class1_ratio = class1_pixels / total_pixels if total_pixels > 0 else 0
                 class2_ratio = class2_pixels / total_pixels if total_pixels > 0 else 0
-                
-                # Calculate mean, std, and normalized greenness for each class
+
                 if class1_pixels > 0:
                     class1_mean = np.mean(greenness[class1_mask])
                     class1_std = np.std(greenness[class1_mask])
                     class1_norm_greenness = np.sum(greenness[class1_mask]) / class1_pixels
+                    class1_mean_temperature = np.nanmean(img_thermal[class1_mask])
+                    class1_std_temperature = np.nanstd(img_thermal[class1_mask])
                 else:
                     class1_mean = 0
                     class1_std = 0
                     class1_norm_greenness = 0
-                    
+                    class1_mean_temperature = np.nan
+                    class1_std_temperature = np.nan
+
                 if class2_pixels > 0:
                     class2_mean = np.mean(greenness[class2_mask])
                     class2_std = np.std(greenness[class2_mask])
                     class2_norm_greenness = np.sum(greenness[class2_mask]) / class2_pixels
+                    class2_mean_temperature = np.nanmean(img_thermal[class2_mask])
+                    class2_std_temperature = np.nanstd(img_thermal[class2_mask])
                 else:
                     class2_mean = 0
                     class2_std = 0
                     class2_norm_greenness = 0
-                    
-                # Store class metrics
+                    class2_mean_temperature = np.nan
+                    class2_std_temperature = np.nan
+
                 class1_metrics = {
                     'ratio': class1_ratio,
                     'mean': class1_mean,
                     'std': class1_std,
-                    'norm_greenness': class1_norm_greenness
+                    'norm_greenness': class1_norm_greenness,
+                    'mean_temperature': class1_mean_temperature,
+                    'std_temperature': class1_std_temperature
                 }
-                
                 class2_metrics = {
                     'ratio': class2_ratio,
                     'mean': class2_mean,
                     'std': class2_std,
-                    'norm_greenness': class2_norm_greenness
+                    'norm_greenness': class2_norm_greenness,
+                    'mean_temperature': class2_mean_temperature,
+                    'std_temperature': class2_std_temperature
                 }
-                
-                # Create visualization
-                visualization = np.zeros_like(img)
-                visualization[class1_mask] = [255, 0, 0]  # Likely understory 
-                visualization[class2_mask] = [0, 255, 0]  # Likely trees
+                visualization = np.zeros_like(img_rgb)
+                visualization[class1_mask] = [255, 0, 0]
+                visualization[class2_mask] = [0, 255, 0]
             else:
-                # Not enough clusters found - use all green pixels as class1
                 class1_metrics = {
                     'ratio': green_ratio,
                     'mean': mean_greenness,
                     'std': std_greenness,
-                    'norm_greenness': norm_greenness
+                    'norm_greenness': norm_greenness,
+                    'mean_temperature': mean_temperature,
+                    'std_temperature': std_temperature
                 }
-                
-                visualization = np.zeros_like(img)
+                visualization = np.zeros_like(img_rgb)
                 visualization[non_zero_mask] = [255, 0, 0]
-        
+
         return green_metrics, green_mask, class1_metrics, class2_metrics, visualization
-        
+
     except Exception as e:
         print(f"An error occurred in DBSCAN clustering: {e}")
         return None, None, None, None, None
 
-def quantify_vegetation_spectral(img):
+def quantify_vegetation_spectral(img_rgb, img_thermal):
     """
     Quantifies vegetation using spectral clustering.
-    
-    Spectral clustering is better at finding complex, non-linearly separable clusters.
-    For large images, this implementation uses a sampling strategy to reduce computation
-    time while maintaining good classification accuracy.
-    
-    Args:
-        img: The input image (BGR format)
-        
-    Returns:
-        tuple: Overall green metrics (ratio, mean, std, norm_greenness),
-               green mask, 
-               class1 metrics (ratio, mean, std, norm_greenness), 
-               class2 metrics (ratio, mean, std, norm_greenness), 
-               class visualization
+    Uses LAB color space for clustering, includes thermal stats.
     """
     try:
-        # Identify green pixels
-        b, g, r = cv2.split(img)
+        b, g, r = cv2.split(img_rgb)
         b, g, r = b.astype(float), g.astype(float), r.astype(float)
         greenness = g / (r + g + b + 1e-10)
-        threshold = 0.38 # 0.38 +- 0.01
+        threshold = 0.37
         green_mask = (greenness > threshold).astype(np.uint8) * 255
-        
+
         green_pixels = np.sum(green_mask > 0)
-        total_pixels = img.shape[0] * img.shape[1]
+        total_pixels = img_rgb.shape[0] * img_rgb.shape[1]
         green_ratio = green_pixels / total_pixels if total_pixels > 0 else 0
-        
-        # Calculate mean and std greenness for all green pixels
+
         green_pixels_mask = green_mask > 0
         if green_pixels > 0:
             mean_greenness = np.mean(greenness[green_pixels_mask])
             std_greenness = np.std(greenness[green_pixels_mask])
             norm_greenness = np.sum(greenness[green_pixels_mask]) / green_pixels
+            mean_temperature = np.nanmean(img_thermal[green_pixels_mask])
+            std_temperature = np.nanstd(img_thermal[green_pixels_mask])
         else:
             mean_greenness = 0
             std_greenness = 0
             norm_greenness = 0
-            
-        # Store overall green metrics as a dictionary
+            mean_temperature = np.nan
+            std_temperature = np.nan
+
         green_metrics = {
             'ratio': green_ratio,
             'mean': mean_greenness,
             'std': std_greenness,
-            'norm_greenness': norm_greenness
+            'norm_greenness': norm_greenness,
+            'mean_temperature': mean_temperature,
+            'std_temperature': std_temperature
         }
-        
-        # Initialize class metrics
-        class1_metrics = {'ratio': 0, 'mean': 0, 'std': 0, 'norm_greenness': 0}
-        class2_metrics = {'ratio': 0, 'mean': 0, 'std': 0, 'norm_greenness': 0}
-        visualization = np.zeros_like(img)
-        
-        # Apply spectral clustering
+
+        class1_metrics = {'ratio': 0, 'mean': 0, 'std': 0, 'norm_greenness': 0, 'mean_temperature': np.nan, 'std_temperature': np.nan}
+        class2_metrics = {'ratio': 0, 'mean': 0, 'std': 0, 'norm_greenness': 0, 'mean_temperature': np.nan, 'std_temperature': np.nan}
+        visualization = np.zeros_like(img_rgb)
+
         non_zero_mask = green_mask > 0
         if np.sum(non_zero_mask) > 100:
-            # Extract green pixels in LAB color space
-            masked_green = cv2.bitwise_and(img, img, mask=(green_mask // 255).astype(np.uint8))
+            masked_green = cv2.bitwise_and(img_rgb, img_rgb, mask=(green_mask // 255).astype(np.uint8))
             lab_image = cv2.cvtColor(masked_green, cv2.COLOR_BGR2LAB)
-            
-            # Get features for clustering
             features = lab_image[non_zero_mask].reshape(-1, 3)
-            
-            # Apply spectral clustering
-            # Limit number of samples to avoid memory issues
             max_samples = 10000
             if len(features) > max_samples:
-                # Random sampling of pixels
                 indices = np.random.choice(len(features), max_samples, replace=False)
                 sampled_features = features[indices]
-                
-                # Fit on samples
-                spectral = SpectralClustering(n_clusters=2, random_state=42, 
-                                             assign_labels='kmeans')
+                spectral = SpectralClustering(n_clusters=2, random_state=42, assign_labels='kmeans')
                 sampled_labels = spectral.fit_predict(sampled_features)
-                
-                # Train a simple classifier on labeled samples for prediction
                 knn = KNeighborsClassifier(n_neighbors=5)
                 knn.fit(sampled_features, sampled_labels)
-                
-                # Predict on all features
                 labels = knn.predict(features)
             else:
-                # Direct clustering on all pixels
-                spectral = SpectralClustering(n_clusters=2, random_state=42,
-                                             assign_labels='kmeans')
+                spectral = SpectralClustering(n_clusters=2, random_state=42, assign_labels='kmeans')
                 labels = spectral.fit_predict(features)
-            
-            # Create full masks
-            class1_mask = np.zeros(img.shape[:2], dtype=bool)
-            class2_mask = np.zeros(img.shape[:2], dtype=bool)
-            
+
+            class1_mask = np.zeros(img_rgb.shape[:2], dtype=bool)
+            class2_mask = np.zeros(img_rgb.shape[:2], dtype=bool)
             y_indices, x_indices = np.where(non_zero_mask)
             class1_indices = np.where(labels == 0)[0]
             class2_indices = np.where(labels == 1)[0]
-            
-            # Map indices back to image coordinates
             class1_mask[y_indices[class1_indices], x_indices[class1_indices]] = True
             class2_mask[y_indices[class2_indices], x_indices[class2_indices]] = True
-            
-            # Calculate individual class ratios
+
             class1_pixels = np.sum(class1_mask)
             class2_pixels = np.sum(class2_mask)
             class1_ratio = class1_pixels / total_pixels if total_pixels > 0 else 0
             class2_ratio = class2_pixels / total_pixels if total_pixels > 0 else 0
-            
-            # Calculate mean, std, and normalized greenness for each class
+
             if class1_pixels > 0:
                 class1_mean = np.mean(greenness[class1_mask])
                 class1_std = np.std(greenness[class1_mask])
                 class1_norm_greenness = np.sum(greenness[class1_mask]) / class1_pixels
+                class1_mean_temperature = np.nanmean(img_thermal[class1_mask])
+                class1_std_temperature = np.nanstd(img_thermal[class1_mask])
             else:
                 class1_mean = 0
                 class1_std = 0
                 class1_norm_greenness = 0
-                
+                class1_mean_temperature = np.nan
+                class1_std_temperature = np.nan
+
             if class2_pixels > 0:
                 class2_mean = np.mean(greenness[class2_mask])
                 class2_std = np.std(greenness[class2_mask])
                 class2_norm_greenness = np.sum(greenness[class2_mask]) / class2_pixels
+                class2_mean_temperature = np.nanmean(img_thermal[class2_mask])
+                class2_std_temperature = np.nanstd(img_thermal[class2_mask])
             else:
                 class2_mean = 0
                 class2_std = 0
                 class2_norm_greenness = 0
-                
-            # Store class metrics
+                class2_mean_temperature = np.nan
+                class2_std_temperature = np.nan
+
             class1_metrics = {
                 'ratio': class1_ratio,
                 'mean': class1_mean,
                 'std': class1_std,
-                'norm_greenness': class1_norm_greenness
+                'norm_greenness': class1_norm_greenness,
+                'mean_temperature': class1_mean_temperature,
+                'std_temperature': class1_std_temperature
             }
-            
             class2_metrics = {
                 'ratio': class2_ratio,
                 'mean': class2_mean,
                 'std': class2_std,
-                'norm_greenness': class2_norm_greenness
+                'norm_greenness': class2_norm_greenness,
+                'mean_temperature': class2_mean_temperature,
+                'std_temperature': class2_std_temperature
             }
-            
-            # Create visualization
-            visualization = np.zeros_like(img)
-            visualization[class1_mask] = [255, 0, 0]  # Likely understory 
-            visualization[class2_mask] = [0, 255, 0]  # Likely trees
-            
+            visualization = np.zeros_like(img_rgb)
+            visualization[class1_mask] = [255, 0, 0]
+            visualization[class2_mask] = [0, 255, 0]
+
         return green_metrics, green_mask, class1_metrics, class2_metrics, visualization
-        
+
     except Exception as e:
         print(f"An error occurred in spectral clustering: {e}")
         return None, None, None, None, None
     
-def quantify_vegetation(img, method="kmeans"):
+def quantify_vegetation(img_rgb, img_thermal, method="kmeans"):
     """
     Quantifies vegetation using various clustering methods.
     
     Args:
-        img: The input image (BGR format)
+        img_rgb: The input RGB image (BGR format)
+        img_thermal: The input thermal image (grayscale format)
         method: Clustering method to use ('kmeans', 'gmm', 'dbscan', 'spectral')
         
     Returns:
@@ -759,43 +786,67 @@ def quantify_vegetation(img, method="kmeans"):
     """
     if method == "kmeans":
         print("Using K-means clustering")
-        return quantify_vegetation_kmeans(img)
+        return quantify_vegetation_kmeans(img_rgb, img_thermal)
     elif method == "gmm":
         print("Using Gaussian Mixture Models")
-        return quantify_vegetation_gmm(img)
+        return quantify_vegetation_gmm(img_rgb, img_thermal)
     elif method == "dbscan":
         print("Using DBSCAN clustering")
-        return quantify_vegetation_dbscan(img)
+        return quantify_vegetation_dbscan(img_rgb, img_thermal)
     elif method == "spectral":
         print("Using Spectral clustering")
-        return quantify_vegetation_spectral(img)
+        return quantify_vegetation_spectral(img_rgb, img_thermal)
     else:
         print(f"Unknown method '{method}', using kmeans instead")
-        return quantify_vegetation_kmeans(img)
+        return quantify_vegetation_kmeans(img_rgb, img_thermal)
 
-#%%
+#%% Main processing loop
+# Get the list of image datetime for thermal images
+imthermalfiles = pd.DataFrame({'file': imthermalfiles})
+imthermalfiles['datetime'] = imthermalfiles['file'].apply(get_image_thermal_datetime)
+
 # Process each image and write results immediately to CSV
-for i in tqdm.tqdm(imfiles, desc="Processing images"):
-    img = cv2.imread(i)
-    if img is None:
+for i in tqdm.tqdm(imrgbfiles, desc="Processing images"):
+    img_rgb = cv2.imread(i)
+    if img_rgb is None:
         print(f"Could not read image: {i}")
         continue
         
     print("processing: ", i)
 
-    # Get image datetime from EXIF metadata
-    image_datetime = get_image_datetime(i)
-    datetime_str = image_datetime if image_datetime else "NA"
+    # Get RGB image datetime from EXIF metadata
+    img_rgb_datetime = get_image_rgb_datetime(i)
+    datetime_str = img_rgb_datetime if img_rgb_datetime else "NA"
     print(f"Image datetime: {datetime_str}")
+   
+    # Find the thermal image that is closest in time to the RGB image
+    img_rgb_datetime = pd.to_datetime(img_rgb_datetime) 
+    imthermalfiles['time_diff'] = imthermalfiles['datetime'].apply(lambda x: abs((x - img_rgb_datetime).total_seconds()))
+    closest_thermal = imthermalfiles.loc[imthermalfiles['time_diff'].idxmin()]
+    thermal_file = closest_thermal['file']
+    time_diff_seconds = closest_thermal['time_diff']
+    print(f"Closest thermal image: {thermal_file} (time difference: {time_diff_seconds} seconds)")
     
+    # Load the thermal image (MAT file)
+    img_thermal = loadmat(thermal_file) # variable name is thermal_image
+
+    # apply cropping
+    img_rgb = mask_and_crop_image(img=img_rgb)
+    img_thermal = mask_and_crop_image(img=img_thermal)
+    img_thermal = np.double(img_thermal) / 100
+    img_thermal[img_thermal == 0] = np.nan  # Set invalid values to NaN
+    img_thermal = img_thermal - 273.15  # Convert from Kelvin to Celsius
+
     # Quantify vegetation within the whole image using the selected method
-    green_metrics, green_mask, class1_metrics, class2_metrics, class_vis = quantify_vegetation(img, method=classification_method)
+    green_metrics, green_mask, class1_metrics, class2_metrics, class_vis = quantify_vegetation(img_rgb, img_thermal, method=classification_method)
 
     if green_metrics is not None:
         print(f"The green pixel ratio is: {green_metrics['ratio']:.4f}")
         print(f"Green mean: {green_metrics['mean']:.4f}, std: {green_metrics['std']:.4f}, normalized: {green_metrics['norm_greenness']:.4f}")
         print(f"Class 1 ratio: {class1_metrics['ratio']:.4f}, mean: {class1_metrics['mean']:.4f}, std: {class1_metrics['std']:.4f}")
         print(f"Class 2 ratio: {class2_metrics['ratio']:.4f}, mean: {class2_metrics['mean']:.4f}, std: {class2_metrics['std']:.4f}")
+        print(f"Class 1 mean temperature: {class1_metrics['mean_temperature']:.2f}°C, std: {class1_metrics['std_temperature']:.2f}")
+        print(f"Class 2 mean temperature: {class2_metrics['mean_temperature']:.2f}°C, std: {class2_metrics['std_temperature']:.2f}")
         
         # Write result to CSV immediately
         with open(csv_path, 'a') as f:
@@ -803,19 +854,20 @@ for i in tqdm.tqdm(imfiles, desc="Processing images"):
                     f'{green_metrics["ratio"]},{green_metrics["mean"]},{green_metrics["std"]},{green_metrics["norm_greenness"]},'
                     f'{class1_metrics["ratio"]},{class1_metrics["mean"]},{class1_metrics["std"]},{class1_metrics["norm_greenness"]},'
                     f'{class2_metrics["ratio"]},{class2_metrics["mean"]},{class2_metrics["std"]},{class2_metrics["norm_greenness"]},'
-                    f'{classification_method}\n')
+                    f'{class1_metrics["mean_temperature"]},{class1_metrics["std_temperature"]},{class2_metrics["mean_temperature"]},{class2_metrics["std_temperature"]},'
+                    f'{time_diff_seconds},{classification_method}\n')
 
         # Apply the green mask to the image
-        masked_img = cv2.bitwise_and(img, img, mask=green_mask // 255)
+        masked_img = cv2.bitwise_and(img_rgb, img_rgb, mask=green_mask // 255)
 
         # Display the original image, the masked image, and vegetation classes
         # Convert the images to RGB format for matplotlib
-        img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        img_rgb = cv2.cvtColor(img_rgb, cv2.COLOR_BGR2RGB)
         masked_img_rgb = cv2.cvtColor(masked_img, cv2.COLOR_BGR2RGB)
         class_vis_rgb = cv2.cvtColor(class_vis, cv2.COLOR_BGR2RGB)
 
         # Create a figure and axes
-        fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+        fig, axes = plt.subplots(1, 4, figsize=(20, 5))
 
         # Display the original image
         axes[0].imshow(img_rgb)
@@ -830,9 +882,11 @@ for i in tqdm.tqdm(imfiles, desc="Processing images"):
         
         # Display the vegetation classes
         axes[2].imshow(class_vis_rgb)
-        axes[2].set_title(f"Vegetation Classes ({classification_method})\n"
-                  f"class1={class1_metrics['ratio']:.2f} (Norm={class1_metrics['norm_greenness']:.2f})\n"
-                  f"class2={class2_metrics['ratio']:.2f} (Norm={class2_metrics['norm_greenness']:.2f})")
+        axes[2].set_title(
+            f"Vegetation Classes ({classification_method})\n"
+            f"class1={class1_metrics['ratio']:.2f} (Temp={class1_metrics['mean_temperature']:.2f}±{class1_metrics['std_temperature']:.2f})\n"
+            f"class2={class2_metrics['ratio']:.2f} (Temp={class2_metrics['mean_temperature']:.2f}±{class2_metrics['std_temperature']:.2f})"
+        )
         axes[2].axis('off')
         
         # Create custom legend elements
@@ -843,13 +897,22 @@ for i in tqdm.tqdm(imfiles, desc="Processing images"):
         
         # Add legend to the bottom of the third subplot
         axes[2].legend(handles=legend_elements, loc='lower center', 
-                  bbox_to_anchor=(0.5, -0.3), frameon=True, 
-                  facecolor='white', edgecolor='black')
+              bbox_to_anchor=(0.5, -0.3), frameon=True, 
+              facecolor='white', edgecolor='black')
+        
+        # Display the thermal image with colorbar
+        im = axes[3].imshow(img_thermal, cmap=cmocean.cm.thermal)
+        axes[3].set_title('Thermal Image')
+        axes[3].axis('off')
+        
+        # Add colorbar
+        cbar = plt.colorbar(im, ax=axes[3], fraction=0.046, pad=0.04)
+        cbar.set_label('Temperature (°C)', rotation=270, labelpad=15)
 
         plt.tight_layout()  # Adjust layout to prevent overlapping titles
 
         # Create output directory structure that mirrors input
-        rel_path = os.path.relpath(os.path.dirname(i), imfolder)
+        rel_path = os.path.relpath(os.path.dirname(i), rgbfolder)
         output_dir = os.path.join(imoutfolder, rel_path)
         
         # Create the directory if it doesn't exist
@@ -869,6 +932,6 @@ for i in tqdm.tqdm(imfiles, desc="Processing images"):
         print(f"Vegetation quantification failed for {i}")
         # Write failure to CSV
         with open(csv_path, 'a') as f:
-            f.write(f'{i},{datetime_str},NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,{classification_method}\n')
+            f.write(f'{i},{datetime_str},NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,{classification_method}\n')
 
 print(f"Done! Results saved to {csv_path}")
