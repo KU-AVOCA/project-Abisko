@@ -3,6 +3,6 @@ import numpy as np
 from scipy.io import savemat
 
 #%%
-img = np.load("/mnt/i/SCIENCE-IGN-ALL/AVOCA_Group/2_Shared_folders/5_Projects/2025Abisko/Tower thermal images/preview/all/npyimages/West-facing_2023-03-20_10.30.02.npy")
-savemat("/mnt/i/SCIENCE-IGN-ALL/AVOCA_Group/2_Shared_folders/5_Projects/2025Abisko/Tower thermal images/preview/all/matimages/West-facing_2023-03-20_10.30.02.mat", {'img': img})
+img = np.load("/mnt/i/SCIENCE-IGN-ALL/AVOCA_Group/2_Shared_folders/5_Projects/2025Abisko/Tower thermal images/preview/all/npyimages/North-facing_2022-03-20_12.30.01.npy")
+savemat("/mnt/i/SCIENCE-IGN-ALL/AVOCA_Group/2_Shared_folders/5_Projects/2025Abisko/Tower thermal images/preview/all/matimages/North-facing_2022-03-20_12.30.01.mat", {'image_thermal': img})
 # %%
