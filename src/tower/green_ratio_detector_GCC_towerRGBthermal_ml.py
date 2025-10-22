@@ -4,21 +4,21 @@ Green Ratio Detector for Vegetation Analysis with Machine Learning Classificatio
 This script processes time-lapse RGB and thermal images to quantify vegetation coverage and
 separate different vegetation types (e.g., trees and understory) using machine learning methods.
 
+Update:
+- For each RGB image, the 5 closest-in-time thermal frames (matching camera position)
+  are selected and processed.
+- The vegetation mask and class segmentation are computed once from the RGB image,
+  and reused for all 5 thermal frames for consistent validation.
+
 Main features:
 1. Recursively searches for RGB and thermal images in specified directories.
 2. Extracts datetime metadata from image EXIF (RGB) and filenames (.mat thermal).
-3. Matches each RGB image to the closest-in-time thermal image.
+3. Matches each RGB image to the five closest-in-time thermal images.
 4. Crops images to a region of interest and applies a buffer to avoid edge artifacts.
-5. Detects green vegetation using the GCC index and a threshold.
-6. Separates green vegetation into two classes using a selected ML method:
-    - K-means clustering (default, in LAB color space)
-    - Gaussian Mixture Models (GMM)
-    - DBSCAN (color + spatial clustering)
-    - Spectral clustering
-7. Calculates ratios, means, and standard deviations for total green vegetation and each class,
-    including corresponding thermal statistics.
-8. Saves results to a CSV file and visualizations.
-9. Saves classification masks as .mat files for validation.
+5. Detects green vegetation using the GCC index and a threshold (from RGB).
+6. Separates green vegetation into two classes using a selected ML method (from RGB).
+7. For each of the 5 thermal frames, calculates thermal statistics over the same masks.
+8. Saves results to CSV, visualizations, and .mat mask files (per thermal).
 
 Dependencies:
 - OpenCV (cv2)
@@ -827,6 +827,26 @@ def quantify_vegetation(img_rgb, img_thermal, method="kmeans"):
     else:
         print(f"Unknown method '{method}', using kmeans instead")
         return quantify_vegetation_kmeans(img_rgb, img_thermal)
+def func_compute_thermal_stats_from_masks(img_thermal, green_mask, class1_mask, class2_mask):
+    """
+    Compute thermal statistics (in Celsius) for the given masks.
+    Assumes img_thermal is already converted to Celsius (np.nan for nodata).
+    """
+    # Overall green
+    gm = green_mask > 0
+    green_temp_mean = np.nanmean(img_thermal[gm]) if np.any(gm) else np.nan
+    green_temp_std  = np.nanstd(img_thermal[gm])  if np.any(gm) else np.nan
+    # Class 1
+    c1 = class1_mask.astype(bool)
+    class1_temp_mean = np.nanmean(img_thermal[c1]) if np.any(c1) else np.nan
+    class1_temp_std  = np.nanstd(img_thermal[c1])  if np.any(c1) else np.nan
+    # Class 2
+    c2 = class2_mask.astype(bool)
+    class2_temp_mean = np.nanmean(img_thermal[c2]) if np.any(c2) else np.nan
+    class2_temp_std  = np.nanstd(img_thermal[c2])  if np.any(c2) else np.nan
+    return (green_temp_mean, green_temp_std,
+            class1_temp_mean, class1_temp_std,
+            class2_temp_mean, class2_temp_std)
 
 #%% Main processing loop
 # Get the list of image datetime for thermal images
@@ -836,13 +856,14 @@ imthermalfiles['position'] = imthermalfiles['file'].apply(get_image_position, im
 
 # temporary step to process only "West-facing" images
 imrgbfiles = [f for f in imrgbfiles if 'West' in f]
+
 # Process each image and write results immediately to CSV
 for i in tqdm.tqdm(imrgbfiles, desc="Processing images"):
     img_rgb = cv2.imread(i)
     if img_rgb is None:
         print(f"Could not read image: {i}")
         continue
-        
+
     print("processing: ", i)
 
     # Get RGB image datetime from EXIF metadata
@@ -852,155 +873,175 @@ for i in tqdm.tqdm(imrgbfiles, desc="Processing images"):
 
     # determine if the rgb image is north-facing or west-facing
     img_rgb_position = get_image_position(i, image_type='rgb')
-    # filter thermal images to only those with the same position
-    imthermalfiles_filtered = imthermalfiles[imthermalfiles['position'] == img_rgb_position]
-   
-    # Find the thermal image that is closest in time to the RGB image
-    img_rgb_datetime_dt = pd.to_datetime(img_rgb_datetime)
-    imthermalfiles_filtered['time_diff'] = imthermalfiles_filtered['datetime'].apply(lambda x: abs((x - img_rgb_datetime_dt).total_seconds()))
-    closest_thermal = imthermalfiles_filtered.loc[imthermalfiles_filtered['time_diff'].idxmin()]
-    thermal_file = closest_thermal['file']
-    time_diff_seconds = closest_thermal['time_diff']
-    print(f"Closest thermal image: {thermal_file} (time difference: {time_diff_seconds} seconds)")
-    
-    # Load the thermal image (MAT file)
-    thermal_mat = loadmat(thermal_file)
-    if 'thermal_image_registered' in thermal_mat:
-        img_thermal = thermal_mat['thermal_image_registered']
-    elif 'thermal_image' in thermal_mat:
-        img_thermal = thermal_mat['thermal_image']
-    else:
-        print(f"No thermal_image variable found in {thermal_file}")
+
+    # Crop RGB once
+    img_rgb = mask_and_crop_image(img=img_rgb)
+
+    # Build vegetation masks once from RGB (thermal not used for mask)
+    dummy_thermal = np.full(img_rgb.shape[:2], np.nan, dtype=float)
+    green_metrics, green_mask, class1_metrics, class2_metrics, class_vis = quantify_vegetation(
+        img_rgb, dummy_thermal, method=classification_method
+    )
+    if green_metrics is None:
+        print(f"Vegetation quantification failed for {i}")
+        with open(csv_path, 'a') as f:
+            f.write(f'{i},{datetime_str},NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,{classification_method},NA\n')
         continue
 
-    # apply cropping
-    img_rgb = mask_and_crop_image(img=img_rgb)
-    img_thermal = mask_and_crop_image(img=img_thermal)
-    img_thermal = np.double(img_thermal) / 100
-    img_thermal[img_thermal == 0] = np.nan  # Set invalid values to NaN
-    img_thermal = img_thermal - 273.15  # Convert from Kelvin to Celsius
+    # Extract class masks from visualization (consistent across methods)
+    class1_mask = (class_vis[:, :, 0] == 255) & (class_vis[:, :, 1] == 0) & (class_vis[:, :, 2] == 0)  # Blue
+    class2_mask = (class_vis[:, :, 0] == 0) & (class_vis[:, :, 1] == 255) & (class_vis[:, :, 2] == 0)  # Green
 
-    # Quantify vegetation within the whole image using the selected method
-    green_metrics, green_mask, class1_metrics, class2_metrics, class_vis = quantify_vegetation(img_rgb, img_thermal, method=classification_method)
+    # Filter thermal images to only those with the same position and valid datetime
+    imthermalfiles_filtered = imthermalfiles[imthermalfiles['position'] == img_rgb_position].copy()
+    imthermalfiles_filtered = imthermalfiles_filtered.dropna(subset=['datetime'])
 
-    if green_metrics is not None:
-        print(f"The green pixel ratio is: {green_metrics['ratio']:.4f}")
-        print(f"Green mean: {green_metrics['mean']:.4f}, std: {green_metrics['std']:.4f}, normalized: {green_metrics['norm_greenness']:.4f}")
-        print(f"Class 1 ratio: {class1_metrics['ratio']:.4f}, mean: {class1_metrics['mean']:.4f}, std: {class1_metrics['std']:.4f}")
-        print(f"Class 2 ratio: {class2_metrics['ratio']:.4f}, mean: {class2_metrics['mean']:.4f}, std: {class2_metrics['std']:.4f}")
-        print(f"Class 1 mean temperature: {class1_metrics['mean_temperature']:.2f}°C, std: {class1_metrics['std_temperature']:.2f}")
-        print(f"Class 2 mean temperature: {class2_metrics['mean_temperature']:.2f}°C, std: {class2_metrics['std_temperature']:.2f}")
-        
-        # Save classification masks as .mat file
-        base_filename = datetime_str.replace(':', '-').replace(' ', '_') if datetime_str != "NA" else os.path.splitext(os.path.basename(i))[0]
-        mask_filename = f"{base_filename}_{classification_method}_masks.mat"
+    if img_rgb_datetime is None:
+        print(f"No datetime for RGB image {i}, skipping matching.")
+        continue
+
+    # Find the 5 closest thermal images in time
+    img_rgb_datetime_dt = pd.to_datetime(img_rgb_datetime)
+    imthermalfiles_filtered['time_diff'] = imthermalfiles_filtered['datetime'].apply(
+        lambda x: abs((pd.to_datetime(x) - img_rgb_datetime_dt).total_seconds())
+    )
+    nearest5 = imthermalfiles_filtered.nsmallest(5, 'time_diff')
+
+    if nearest5.empty:
+        print(f"No matching thermal images found for {i}")
+        continue
+
+    # For saving masked visualization (RGB part constant), precompute masked RGB once
+    masked_img = cv2.bitwise_and(img_rgb, img_rgb, mask=green_mask // 255)
+    img_rgb_vis = cv2.cvtColor(img_rgb, cv2.COLOR_BGR2RGB)
+    masked_img_rgb = cv2.cvtColor(masked_img, cv2.COLOR_BGR2RGB)
+    class_vis_rgb = cv2.cvtColor(class_vis, cv2.COLOR_BGR2RGB)
+
+    # Loop through the 5 closest thermal images
+    for row in nearest5.itertuples(index=False):
+        thermal_file = row.file
+        time_diff_seconds = row.time_diff
+        therm_dt_str = get_image_thermal_datetime(thermal_file) or "NA"
+        print(f"Closest thermal image: {thermal_file} (Δt={time_diff_seconds:.2f}s)")
+
+        # Load and prep thermal (registered uint16 in Kelvin*100, 0 = nodata)
+        thermal_mat = loadmat(thermal_file)
+        if 'thermal_image_registered' in thermal_mat:
+            img_thermal = thermal_mat['thermal_image_registered']
+        elif 'thermal_image' in thermal_mat:
+            img_thermal = thermal_mat['thermal_image']
+        else:
+            print(f"No thermal_image variable found in {thermal_file}, skipping.")
+            continue
+
+        # Crop to match RGB crop
+        img_thermal = mask_and_crop_image(img=img_thermal)
+        # Convert to Celsius (with NaNs)
+        img_thermal = np.double(img_thermal) / 100.0
+        img_thermal[img_thermal == 0] = np.nan
+        img_thermal = img_thermal - 273.15
+
+        # Compute thermal stats over fixed masks
+        (green_temp_mean, green_temp_std,
+         class1_temp_mean, class1_temp_std,
+         class2_temp_mean, class2_temp_std) = func_compute_thermal_stats_from_masks(
+            img_thermal, green_mask, class1_mask, class2_mask
+        )
+
+        # Update metrics for CSV
+        gm = dict(green_metrics)  # copy
+        gm['mean_temperature'] = green_temp_mean
+        gm['std_temperature'] = green_temp_std
+
+        c1m = dict(class1_metrics)
+        c1m['mean_temperature'] = class1_temp_mean
+        c1m['std_temperature'] = class1_temp_std
+
+        c2m = dict(class2_metrics)
+        c2m['mean_temperature'] = class2_temp_mean
+        c2m['std_temperature'] = class2_temp_std
+
+        print(f"GR={gm['ratio']:.4f}, "
+              f"C1 Temp={c1m['mean_temperature']:.2f}±{c1m['std_temperature']:.2f}, "
+              f"C2 Temp={c2m['mean_temperature']:.2f}±{c2m['std_temperature']:.2f}")
+
+        # Save classification masks as .mat (unique per thermal to avoid overwrite)
+        base_rgb = datetime_str.replace(':', '-').replace(' ', '_') if datetime_str != "NA" else os.path.splitext(os.path.basename(i))[0]
+        base_therm = therm_dt_str.replace(':', '-').replace(' ', '_') if therm_dt_str != "NA" else os.path.splitext(os.path.basename(thermal_file))[0]
+        mask_filename = f"{base_rgb}__therm_{base_therm}_{classification_method}_masks.mat"
         mask_filepath = os.path.join(masks_dir, mask_filename)
-        
-        # Extract class masks from visualization
-        class1_mask = (class_vis[:, :, 0] == 255) & (class_vis[:, :, 1] == 0) & (class_vis[:, :, 2] == 0)  # Blue pixels
-        class2_mask = (class_vis[:, :, 0] == 0) & (class_vis[:, :, 1] == 255) & (class_vis[:, :, 2] == 0)  # Green pixels
-        
-        # Save masks with metadata
+
         savemat(mask_filepath, {
             'green_mask': green_mask.astype(np.uint8),
             'class1_mask': class1_mask.astype(np.uint8),
             'class2_mask': class2_mask.astype(np.uint8),
             'metadata': {
-                'datetime': datetime_str,
+                'datetime_rgb': datetime_str,
+                'datetime_thermal': therm_dt_str,
                 'method': classification_method,
                 'rgb_file': i,
                 'thermal_file': thermal_file,
-                'green_ratio': green_metrics['ratio'],
-                'class1_ratio': class1_metrics['ratio'],
-                'class2_ratio': class2_metrics['ratio'],
-                'class1_temp_mean': class1_metrics['mean_temperature'],
-                'class2_temp_mean': class2_metrics['mean_temperature']
+                'green_ratio': gm['ratio'],
+                'class1_ratio': c1m['ratio'],
+                'class2_ratio': c2m['ratio'],
+                'class1_temp_mean': c1m['mean_temperature'],
+                'class2_temp_mean': c2m['mean_temperature']
             }
         })
         print(f"Saved classification masks to: {mask_filepath}")
-        
-        # Write result to CSV immediately
+
+        # Write result to CSV (per thermal)
         with open(csv_path, 'a') as f:
             f.write(f'{i},{datetime_str},'
-                    f'{green_metrics["ratio"]},{green_metrics["mean"]},{green_metrics["std"]},{green_metrics["norm_greenness"]},'
-                    f'{class1_metrics["ratio"]},{class1_metrics["mean"]},{class1_metrics["std"]},{class1_metrics["norm_greenness"]},'
-                    f'{class2_metrics["ratio"]},{class2_metrics["mean"]},{class2_metrics["std"]},{class2_metrics["norm_greenness"]},'
-                    f'{class1_metrics["mean_temperature"]},{class1_metrics["std_temperature"]},{class2_metrics["mean_temperature"]},{class2_metrics["std_temperature"]},'
+                    f'{gm["ratio"]},{gm["mean"]},{gm["std"]},{gm["norm_greenness"]},'
+                    f'{c1m["ratio"]},{c1m["mean"]},{c1m["std"]},{c1m["norm_greenness"]},'
+                    f'{c2m["ratio"]},{c2m["mean"]},{c2m["std"]},{c2m["norm_greenness"]},'
+                    f'{c1m["mean_temperature"]},{c1m["std_temperature"]},'
+                    f'{c2m["mean_temperature"]},{c2m["std_temperature"]},'
                     f'{time_diff_seconds},{classification_method},{mask_filename}\n')
 
-        # Apply the green mask to the image
-        masked_img = cv2.bitwise_and(img_rgb, img_rgb, mask=green_mask // 255)
-
-        # Display the original image, the masked image, and vegetation classes
-        # Convert the images to RGB format for matplotlib
-        img_rgb_vis = cv2.cvtColor(img_rgb, cv2.COLOR_BGR2RGB)
-        masked_img_rgb = cv2.cvtColor(masked_img, cv2.COLOR_BGR2RGB)
-        class_vis_rgb = cv2.cvtColor(class_vis, cv2.COLOR_BGR2RGB)
-
-        # Create a figure and axes
+        # Visualization: use same RGB/masks but current thermal
         fig, axes = plt.subplots(1, 4, figsize=(20, 5))
-
-        # Display the original image
         axes[0].imshow(img_rgb_vis)
-        title_text = f"Original ({datetime_str})" if datetime_str != "NA" else "Original"
-        axes[0].set_title(title_text)
+        axes[0].set_title(f"Original ({datetime_str})" if datetime_str != "NA" else "Original")
         axes[0].axis('off')
 
-        # Display the masked image
         axes[1].imshow(masked_img_rgb)
-        axes[1].set_title(f"Green Masked (GR={green_metrics['ratio']:.2f}, Norm={green_metrics['norm_greenness']:.2f})")
+        axes[1].set_title(f"Green Masked (GR={gm['ratio']:.2f}, Norm={gm['norm_greenness']:.2f})")
         axes[1].axis('off')
-        
-        # Display the vegetation classes
+
         axes[2].imshow(class_vis_rgb)
         axes[2].set_title(
             f"Vegetation Classes ({classification_method})\n"
-            f"class1={class1_metrics['ratio']:.2f} (Temp={class1_metrics['mean_temperature']:.2f}±{class1_metrics['std_temperature']:.2f})\n"
-            f"class2={class2_metrics['ratio']:.2f} (Temp={class2_metrics['mean_temperature']:.2f}±{class2_metrics['std_temperature']:.2f})"
+            f"class1={c1m['ratio']:.2f} (Temp={c1m['mean_temperature']:.2f}±{c1m['std_temperature']:.2f})\n"
+            f"class2={c2m['ratio']:.2f} (Temp={c2m['mean_temperature']:.2f}±{c2m['std_temperature']:.2f})"
         )
         axes[2].axis('off')
-        
-        # Create custom legend elements
+
         legend_elements = [
             Patch(facecolor='blue', edgecolor='black', label='Class 1'),
             Patch(facecolor='green', edgecolor='black', label='Class 2')
         ]
-        
-        # Add legend
-        axes[2].legend(handles=legend_elements, loc='lower center', 
-              bbox_to_anchor=(0.5, -0.3), frameon=True, 
-              facecolor='white', edgecolor='black')
-        
-        # Display the thermal image with colorbar
+        axes[2].legend(handles=legend_elements, loc='lower center',
+                       bbox_to_anchor=(0.5, -0.3), frameon=True,
+                       facecolor='white', edgecolor='black')
+
         im = axes[3].imshow(img_thermal, cmap=cmocean.cm.thermal)
         axes[3].set_title('Thermal Image')
         axes[3].axis('off')
-        
-        # Add colorbar
         cbar = plt.colorbar(im, ax=axes[3], fraction=0.046, pad=0.04)
         cbar.set_label('Temperature (°C)', rotation=270, labelpad=15)
-
         plt.tight_layout()
 
-        # Create output directory structure that mirrors input
+        # Save per-thermal figure (avoid overwrite)
         rel_path = os.path.relpath(os.path.dirname(i), rgbfolder)
         output_dir = os.path.join(imoutfolder, rel_path)
-        
-        if not os.path.exists(output_dir):
-            os.makedirs(output_dir)
-            
-        # Save the figure
-        base_filename_plot = datetime_str.replace(':', '-') if datetime_str != "NA" else os.path.splitext(os.path.basename(i))[0]
+        os.makedirs(output_dir, exist_ok=True)
+        base_plot = base_rgb + f"__therm_{base_therm}"
         extension = os.path.splitext(os.path.basename(i))[1]
-        output_path = os.path.join(output_dir, f"{base_filename_plot}_green_masked{extension}")
+        output_path = os.path.join(output_dir, f"{base_plot}_green_masked{extension}")
         fig.savefig(output_path)
         plt.close(fig)
-
-    else:
-        print(f"Vegetation quantification failed for {i}")
-        # Write failure to CSV
-        with open(csv_path, 'a') as f:
-            f.write(f'{i},{datetime_str},NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,{classification_method},NA\n')
 
 print(f"Done! Results saved to {csv_path}")
 print(f"Classification masks saved to {masks_dir}")
