@@ -66,8 +66,8 @@
 % - No cropping is performed
 
 % --- User parameters ---
-input_folder = 'I:\SCIENCE-IGN-ALL\AVOCA_Group\2_Shared_folders\5_Projects\2025Abisko\Tower thermal images\preview\all\matimages';      % Folder with .mat files (each with 'thermal_image')
-output_mat_folder = 'I:\SCIENCE-IGN-ALL\AVOCA_Group\2_Shared_folders\5_Projects\2025Abisko\Tower thermal images\preview\all\registered';   % Output folder for .mat files
+input_folder = "I:\SCIENCE-IGN-ALL\AVOCA_Group\2_Shared_folders\5_Projects\2025Abisko\Tower thermal images\preview\all\vignetCorrectedImages";      % Folder with .mat files (each with 'thermal_image')
+output_mat_folder = 'I:\SCIENCE-IGN-ALL\AVOCA_Group\2_Shared_folders\5_Projects\2025Abisko\Tower thermal images\preview\all\registerednew';   % Output folder for .mat files
 tform_file = 'tform_thermalRGB.mat';             % Path to transformation file
 
 % Create output folders if they don't exist
@@ -101,11 +101,11 @@ parfor k = 1:num_files
     
     % Load thermal image
     data = load(fpath);
-    if ~isfield(data, 'thermal_image')
-        fprintf('Skipping %s (no variable "thermal_image")\n', fname);
+    if ~isfield(data, 'thermalImage')
+        fprintf('Skipping %s (no variable "thermalImage")\n', fname);
         continue
     end
-    thermal_image = data.thermal_image;
+    thermal_image = data.thermalImage;
 
     % Register image
     thermal_image_registered = imwarp(thermal_image, tform, ...
