@@ -66,8 +66,8 @@
 % - No cropping is performed
 
 % --- User parameters ---
-input_folder = "I:\SCIENCE-IGN-ALL\AVOCA_Group\2_Shared_folders\5_Projects\2025Abisko\Tower thermal images\preview\all\vignetCorrectedImages";      % Folder with .mat files (each with 'thermal_image')
-output_mat_folder = 'I:\SCIENCE-IGN-ALL\AVOCA_Group\2_Shared_folders\5_Projects\2025Abisko\Tower thermal images\preview\all\registerednew';   % Output folder for .mat files
+input_folder = "/data/shunan/data/KU/vignetCorrectedImages";      % Folder with .mat files (each with 'thermal_image')
+output_mat_folder = '/data_3/shunan_2/KU/registeredMatIMages';   % Output folder for .mat files
 tform_file = 'tform_thermalRGB.mat';             % Path to transformation file
 
 % Create output folders if they don't exist
@@ -106,6 +106,9 @@ parfor k = 1:num_files
         continue
     end
     thermal_image = data.thermalImage;
+
+    % Remove redundant sensor columns (136 to 142)
+    thermal_image(:, 136:142) = [];
 
     % Register image
     thermal_image_registered = imwarp(thermal_image, tform, ...

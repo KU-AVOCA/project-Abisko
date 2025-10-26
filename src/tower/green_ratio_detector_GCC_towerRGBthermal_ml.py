@@ -75,7 +75,7 @@ sns.set_theme(style="darkgrid", font_scale=1.5)
 classification_method = "kmeans"  # Options: "kmeans", "gmm", "dbscan", "spectral"
 
 #%% load both RGB and thermal images
-rgbfolder = '/mnt/i/SCIENCE-IGN-ALL/AVOCA_Group/1_Personal_folders/1_Simon/1_Abisko/6_Tower_Data/Tower RGB images/1 Data/1 Years'
+rgbfolder = '/data/shunan/data/KU/rgbimages/'
 imrgbfiles = []
 imrgbfiles.extend(glob.glob(os.path.join(rgbfolder, '**/', '*.JPG'), recursive=True))
 imrgbfiles.extend(glob.glob(os.path.join(rgbfolder, '**/', '*.jpg'), recursive=True))
@@ -85,12 +85,12 @@ imrgbfiles.extend(glob.glob(os.path.join(rgbfolder, '**/', '*.png'), recursive=T
 imrgbfiles.extend(glob.glob(os.path.join(rgbfolder, '**/', '*.PNG'), recursive=True))
 print(f"Found {len(imrgbfiles)} images in {rgbfolder}")
 
-thermalfolder = '/mnt/i/SCIENCE-IGN-ALL/AVOCA_Group/2_Shared_folders/5_Projects/2025Abisko/Tower thermal images/preview/all/registered'
+thermalfolder = '/data_3/shunan_2/KU/registeredMatImages/'
 imthermalfiles = []
 imthermalfiles.extend(glob.glob(os.path.join(thermalfolder, '**/', '*.mat'), recursive=True))
 print(f"Found {len(imthermalfiles)} thermal .mat files in {thermalfolder}")
 
-imoutfolder = '/mnt/i/SCIENCE-IGN-ALL/AVOCA_Group/2_Shared_folders/5_Projects/2025Abisko/Tower_RGB_Thermal_Analysis/Data_greenes_thermal_' + classification_method + '_mean'
+imoutfolder = '/data_3/shunan_2/KU/Data_greenes_thermal_' + classification_method + '_mean'
 # Create the output directory if it doesn't exist
 if not os.path.exists(imoutfolder):
     os.makedirs(imoutfolder)
@@ -212,7 +212,7 @@ def mask_and_crop_image(img):
     """
     Crop the image to remove mismatches and edge effects.
 
-    - Crops the image to the first 800 rows to match the region of interest.
+    - Crops the image to remove the first 800 rows to match the region of interest.
     - Applies a 50-pixel buffer on all sides to avoid edge artifacts.
 
     Args:
@@ -224,13 +224,12 @@ def mask_and_crop_image(img):
     crop_top = 800
     buffer = 50
 
-    # Crop to first 800 rows
-    img = img[:crop_top]
-
     # Apply buffer to all sides
     if img.ndim == 3:
+        img = img[crop_top:, :, :]
         img = img[buffer:-buffer, buffer:-buffer, :]
     else:
+        img = img[crop_top:, :]
         img = img[buffer:-buffer, buffer:-buffer]
 
     return img
