@@ -45,7 +45,7 @@ NUM_PROCESSES = 15#cpu_count() - 170  # Leave 170 CPUs free
 #%% Global paths (need to be global for multiprocessing)
 rgbfolder = '/data/shunan/data/KU/rgbimages/'
 thermalfolder = '/data_3/shunan_2/KU/registeredMatImages/'
-imoutfolder = '/data_3/shunan_2/KU/Data_greenes_thermal_' + classification_method + '_mean'
+imoutfolder = '/data_3/shunan_2/KU/Data_greenes_thermal_38_' + classification_method + '_mean'
 
 #%% Create output directories
 if not os.path.exists(imoutfolder):
@@ -138,7 +138,7 @@ def quantify_vegetation_kmeans(img_rgb, img_thermal):
         b, g, r = cv2.split(img_rgb)
         b, g, r = b.astype(float), g.astype(float), r.astype(float)
         greenness = g / (r + g + b + 1e-10)
-        threshold = 0.37
+        threshold = 0.38
         green_mask = (greenness > threshold).astype(np.uint8) * 255
         
         green_pixels = np.sum(green_mask > 0)

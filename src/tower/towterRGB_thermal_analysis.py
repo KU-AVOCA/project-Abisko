@@ -116,6 +116,17 @@ print("Daytime images:", len(daytime_df))
 print(f"Removed {len(df) - len(daytime_df)} images taken during night or low-light conditions")
 
 
+#%% # the thermal images were 5 in a sequence, take the mean for all variables for each sequence
+daytime_df = daytime_df.groupby(['imgroup', 'year', 'month', 'doys', 'datetime']).agg({
+    'green_ratio': 'median',
+    'understory_ratio': 'median',
+    'birch_ratio': 'median',
+    'understory_norm': 'median',
+    'birch_norm': 'median',
+    'understory_temp_mean': 'median',
+    'birch_temp_mean': 'median'
+}).reset_index()
+
 
 #%% Visualization - Overall green ratio distribution by year
 fig, ax = plt.subplots(figsize=(8, 6))
@@ -138,6 +149,49 @@ ax.legend(title='')
 plt.tight_layout()
 
 
+#%% Visualization - time series of green ratio for understory and birch by year using boxplots
+temp_df = daytime_df[['doys', 'year', 'understory_ratio', 'birch_ratio']].melt(
+    id_vars=['doys', 'year'],
+    value_vars=['understory_ratio', 'birch_ratio'],
+    var_name='type',
+    value_name='ratio_value'
+)
+temp_df['type'] = temp_df['type'].map({'understory_ratio': 'Understory', 'birch_ratio': 'Birch'})
+fig, ax = plt.subplots(figsize=(14, 6))
+sns.boxplot(
+    data=temp_df,
+    x='year',
+    y='ratio_value',
+    hue='type',
+    ax=ax,
+    palette='deep'
+)
+ax.set(xlabel='Day of Year', ylabel='Green Ratio', title='Understory and Birch Green Ratio Over Time (Daytime Images Only)')
+ax.legend(title='Year', bbox_to_anchor=(1.05, 1), loc='upper left')
+plt.tight_layout()
+# plt.savefig('understory_birch_ratio_boxplot_daytime.png', dpi=300, bbox_inches='tight')
+
+#%% Visualization - time series of green normalized values for understory and birch by year using boxplots
+temp_df = daytime_df[['doys', 'year', 'understory_norm', 'birch_norm']].melt(
+    id_vars=['doys', 'year'],   
+    value_vars=['understory_norm', 'birch_norm'],
+    var_name='type',
+    value_name='norm_value'
+)
+temp_df['type'] = temp_df['type'].map({'understory_norm': 'Understory', 'birch_norm': 'Birch'})
+fig, ax = plt.subplots(figsize=(14, 6))
+sns.boxplot(
+    data=temp_df,
+    x='year',
+    y='norm_value',
+    hue='type',
+    ax=ax,
+    palette='deep'
+)
+ax.set(xlabel='Day of Year', ylabel='Normalized Green Value', title='Understory and Birch Normalized Green Value Over Time (Daytime Images Only)')
+ax.legend(title='Year', bbox_to_anchor=(1.05, 1), loc='upper left')
+plt.tight_layout()
+# plt.savefig('understory_birch_norm_boxplot_daytime.png', dpi=300
 #%% Visualization - time series of green ratio, temperature for understory and birch
 fig, axs = plt.subplots(2, 1, figsize=(14, 10), sharex=True)
 
@@ -204,6 +258,59 @@ fig.legend(handles=year_handles + type_handles, loc='upper right', title='Year /
 plt.tight_layout()
 # plt.savefig('understory_birch_ratio_temp_timeseries_daytime.png', dpi=300, bbox_inches='tight')
 
+
+#%% Visualization - time series of green normalized values (norm) and temperature for understory and birch
+fig2, axs2 = plt.subplots(2, 1, figsize=(14, 10), sharex=True)
+
+# --- Normalized green (understory_norm, birch_norm) ---
+norm_melted = daytime_df.melt(
+    id_vars=['doys', 'year'],
+    value_vars=['understory_norm', 'birch_norm'],
+    var_name='type',
+    value_name='norm_value'
+)
+norm_melted['type'] = norm_melted['type'].map({'understory_norm': 'Understory', 'birch_norm': 'Birch'})
+
+sns.lineplot(
+    data=norm_melted,
+    x='doys',
+    y='norm_value',
+    hue='year',
+    style='type',
+    ax=axs2[0],
+    palette=palette,
+    dashes=True
+)
+axs2[0].set(ylabel='Normalized Green', title='Understory and Birch Normalized Green Over Time (Daytime Images Only)')
+
+# --- Temperature (both Understory and Birch) reused ---
+sns.lineplot(
+    data=temp_melted,
+    x='doys',
+    y='temp_value',
+    hue='year',
+    style='type',
+    ax=axs2[1],
+    palette=palette,
+    dashes=True
+)
+axs2[1].set(xlabel='Day of Year', ylabel='Temperature (°C)', title='Understory and Birch Temperature Over Time (Daytime Images Only)')
+
+# Remove legends on individual axes and add combined legend
+for ax in axs2:
+    if ax.get_legend() is not None:
+        ax.get_legend().remove()
+
+year_handles2 = [Line2D([0], [0], color=palette[y], lw=2, label=str(y)) for y in years_sorted]
+type_handles2 = [
+    Line2D([0], [0], color='k', lw=2, linestyle='-', label='Understory'),
+    Line2D([0], [0], color='k', lw=2, linestyle='-.', label='Birch')
+]
+
+fig2.legend(handles=year_handles2 + type_handles2, loc='upper right', title='Year / Type', bbox_to_anchor=(1.15, 0.9))
+plt.tight_layout()
+# plt.savefig('understory_birch_norm_temp_timeseries_daytime.png', dpi=300, bbox_inches='tight')
+
 #%% statistical test to compare the temperature between understory and birch in different years
 
 for year in sorted(daytime_df['year'].dropna().unique()):
@@ -218,9 +325,58 @@ for year in sorted(daytime_df['year'].dropna().unique()):
     else:
         print(f"  -> No significant difference in temperatures between Understory and Birch (p >= 0.05)")
 
+#%% compare month by month
+for year in sorted(daytime_df['year'].dropna().unique()):
+    print(f"\nYear {year} monthly comparison:")
+    for month in range(1, 13):
+        understory_temps = daytime_df[(daytime_df['year'] == year) & (daytime_df['month'] == month)]['understory_temp_mean'].dropna()
+        birch_temps = daytime_df[(daytime_df['year'] == year) & (daytime_df['month'] == month)]['birch_temp_mean'].dropna()
+        if len(understory_temps) < 2 or len(birch_temps) < 2:
+            print(f"  Month {month}: insufficient data for test")
+            continue
+        t_stat, p_value = stats.ttest_ind(understory_temps, birch_temps, equal_var=False)
+        print(f"  Month {month}: t-statistic = {t_stat:.3f}, p-value = {p_value:.3e}")
+        if p_value < 0.05:
+            print(f"    -> Significant difference in temperatures between Understory and Birch (p < 0.05)")
+            print(f"       Understory mean = {understory_temps.mean():.2f}, Birch mean = {birch_temps.mean():.2f}")
+            print(f"       Understory std = {understory_temps.std():.2f}, Birch std = {birch_temps.std():.2f}")
+        else:
+            print(f"    -> No significant difference in temperatures between Understory and Birch (p >= 0.05)")
+#%% statistical test to compare the temperature between years for understory and birch separately
+for veg_type, col_name in [('Understory', 'understory_temp_mean'), ('Birch', 'birch_temp_mean')]:
+    print(f"\nStatistical comparison of {veg_type} temperature between years (only overlapping DOYs):")
+    years = sorted(daytime_df['year'].dropna().unique())
+    for i in range(len(years)):
+        for j in range(i + 1, len(years)):
+            year1 = years[i]
+            year2 = years[j]
 
+            df1 = daytime_df[daytime_df['year'] == year1][['doys', col_name]].dropna()
+            df2 = daytime_df[daytime_df['year'] == year2][['doys', col_name]].dropna()
+
+            common_doys = np.intersect1d(df1['doys'].unique(), df2['doys'].unique())
+            if len(common_doys) < 2:
+                print(f"  Year {year1} vs Year {year2}: insufficient overlapping DOYs for test (overlap={len(common_doys)})")
+                continue
+
+            # Aggregate to one value per DOY (daily mean) and align by DOY
+            d1 = df1[df1['doys'].isin(common_doys)].groupby('doys')[col_name].mean().sort_index()
+            d2 = df2[df2['doys'].isin(common_doys)].groupby('doys')[col_name].mean().sort_index()
+
+            # Ensure alignment of indices
+            d1 = d1.loc[common_doys]
+            d2 = d2.loc[common_doys]
+
+            # Use paired test because values are matched by DOY
+            t_stat, p_value = stats.ttest_rel(d1, d2, alternative='less')
+            print(f"  Year {year1} vs Year {year2}: n_days={len(common_doys)}, t-statistic = {t_stat:.3f}, p-value = {p_value:.3e}")
+            if p_value < 0.05:
+                print(f"    -> Significant difference in {veg_type} temperature and year {year1} < {year2} (p < 0.05)")
+                print(f"       Year {year1} mean = {d1.mean():.2f} °C, std = {d1.std():.2f}; Year {year2} mean = {d2.mean():.2f} °C, std = {d2.std():.2f}")
+            else:
+                print(f"    -> No significant difference in {veg_type} temperature (p >= 0.05)")
 #%% convert data to daily averages
-daytime_df = daytime_df.groupby(['imgroup', 'year', 'doys']).agg({
+daily_daytime_df = daytime_df.groupby(['imgroup', 'year', 'doys']).agg({
     'green_ratio': 'mean',
     'understory_ratio': 'mean',
     'birch_ratio': 'mean',
@@ -231,9 +387,9 @@ daytime_df = daytime_df.groupby(['imgroup', 'year', 'doys']).agg({
 }).reset_index()
 
 #%% statistical test to compare daily temperature between understory and birch in different years
-for year in sorted(daytime_df['year'].dropna().unique()):
-    understory_temps = daytime_df[daytime_df['year'] == year]['understory_temp_mean'].dropna()
-    birch_temps = daytime_df[daytime_df['year'] == year]['birch_temp_mean'].dropna()
+for year in sorted(daily_daytime_df['year'].dropna().unique()):
+    understory_temps = daily_daytime_df[daily_daytime_df['year'] == year]['understory_temp_mean'].dropna()
+    birch_temps = daily_daytime_df[daily_daytime_df['year'] == year]['birch_temp_mean'].dropna()
     t_stat, p_value = stats.ttest_ind(understory_temps, birch_temps, equal_var=False)
     print(f"(Daily Avg) Year {year}: t-statistic = {t_stat:.3f}, p-value = {p_value:.3e}")
     if p_value < 0.05:
