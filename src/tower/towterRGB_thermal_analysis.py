@@ -74,7 +74,7 @@ def is_daytime(row, min_elevation=5.0):
         return False
 
 #%% Load and process data
-csvfile = "/data_3/shunan_2/KU/Data_greenes_thermal_kmeans_mean/results/green_ratio_thermal_kmeans.csv"
+csvfile = "/mnt/i/SCIENCE-IGN-ALL/AVOCA_Group/2_Shared_folders/5_Projects/2025Abisko/Tower_RGB_Thermal_Analysis/Data_greenes_thermal_kmeans_mean/results/green_ratio_thermal_kmeans.csv"
 df = pd.read_csv(csvfile)
 
 # Rename columns for clarity
@@ -314,37 +314,53 @@ plt.tight_layout()
 #%% statistical test to compare the temperature between understory and birch in different years
 
 for year in sorted(daytime_df['year'].dropna().unique()):
-    understory_temps = daytime_df[daytime_df['year'] == year]['understory_temp_mean'].dropna()
-    birch_temps = daytime_df[daytime_df['year'] == year]['birch_temp_mean'].dropna()
-    t_stat, p_value = stats.ttest_ind(understory_temps, birch_temps, equal_var=False)
-    print(f"Year {year}: t-statistic = {t_stat:.3f}, p-value = {p_value:.3e}")
+    # Align by DOY for paired comparison
+    df_year = daytime_df[daytime_df['year'] == year][['doys', 'understory_temp_mean', 'birch_temp_mean']].dropna()
+    common_doys = np.intersect1d(
+        df_year['doys'][df_year['understory_temp_mean'].notna()],
+        df_year['doys'][df_year['birch_temp_mean'].notna()]
+    )
+    if len(common_doys) < 2:
+        print(f"Year {year}: insufficient paired data for Wilcoxon test")
+        continue
+    understory_temps = df_year[df_year['doys'].isin(common_doys)].sort_values('doys')['understory_temp_mean']
+    birch_temps = df_year[df_year['doys'].isin(common_doys)].sort_values('doys')['birch_temp_mean']
+    # Wilcoxon signed-rank test (paired, non-parametric)
+    w_stat, p_value = stats.wilcoxon(understory_temps, birch_temps)
+    print(f"Year {year}: Wilcoxon statistic = {w_stat:.3f}, p-value = {p_value:.3e}")
     if p_value < 0.05:
-        print(f"  -> Significant difference in temperatures between Understory and Birch (p < 0.05)")
+        print(f"  -> Significant difference in paired temperatures between Understory and Birch (p < 0.05)")
         print(f"     Understory mean = {understory_temps.mean():.2f}, Birch mean = {birch_temps.mean():.2f}")
         print(f"     Understory std = {understory_temps.std():.2f}, Birch std = {birch_temps.std():.2f}")
     else:
-        print(f"  -> No significant difference in temperatures between Understory and Birch (p >= 0.05)")
+        print(f"  -> No significant difference in paired temperatures between Understory and Birch (p >= 0.05)")
 
-#%% compare month by month
+#%% compare month by month using Wilcoxon signed-rank test (paired, non-parametric)
 for year in sorted(daytime_df['year'].dropna().unique()):
     print(f"\nYear {year} monthly comparison:")
     for month in range(1, 13):
-        understory_temps = daytime_df[(daytime_df['year'] == year) & (daytime_df['month'] == month)]['understory_temp_mean'].dropna()
-        birch_temps = daytime_df[(daytime_df['year'] == year) & (daytime_df['month'] == month)]['birch_temp_mean'].dropna()
-        if len(understory_temps) < 2 or len(birch_temps) < 2:
-            print(f"  Month {month}: insufficient data for test")
+        df_month = daytime_df[(daytime_df['year'] == year) & (daytime_df['month'] == month)][['doys', 'understory_temp_mean', 'birch_temp_mean']].dropna()
+        common_doys = np.intersect1d(
+            df_month['doys'][df_month['understory_temp_mean'].notna()],
+            df_month['doys'][df_month['birch_temp_mean'].notna()]
+        )
+        if len(common_doys) < 2:
+            print(f"  Month {month}: insufficient paired data for Wilcoxon test")
             continue
-        t_stat, p_value = stats.ttest_ind(understory_temps, birch_temps, equal_var=False)
-        print(f"  Month {month}: t-statistic = {t_stat:.3f}, p-value = {p_value:.3e}")
+        understory_temps = df_month[df_month['doys'].isin(common_doys)].sort_values('doys')['understory_temp_mean']
+        birch_temps = df_month[df_month['doys'].isin(common_doys)].sort_values('doys')['birch_temp_mean']
+        w_stat, p_value = stats.wilcoxon(understory_temps, birch_temps)
+        print(f"  Month {month}: Wilcoxon statistic = {w_stat:.3f}, p-value = {p_value:.3e}")
         if p_value < 0.05:
-            print(f"    -> Significant difference in temperatures between Understory and Birch (p < 0.05)")
+            print(f"    -> Significant difference in paired temperatures between Understory and Birch (p < 0.05)")
             print(f"       Understory mean = {understory_temps.mean():.2f}, Birch mean = {birch_temps.mean():.2f}")
             print(f"       Understory std = {understory_temps.std():.2f}, Birch std = {birch_temps.std():.2f}")
         else:
-            print(f"    -> No significant difference in temperatures between Understory and Birch (p >= 0.05)")
-#%% statistical test to compare the temperature between years for understory and birch separately
+            print(f"    -> No significant difference in paired temperatures between Understory and Birch (p >= 0.05)")
+
+#%% statistical test to compare the temperature between years for understory and birch separately (Wilcoxon signed-rank test, paired by DOY)
 for veg_type, col_name in [('Understory', 'understory_temp_mean'), ('Birch', 'birch_temp_mean')]:
-    print(f"\nStatistical comparison of {veg_type} temperature between years (only overlapping DOYs):")
+    print(f"\nStatistical comparison of {veg_type} temperature between years (only overlapping DOYs, Wilcoxon signed-rank test):")
     years = sorted(daytime_df['year'].dropna().unique())
     for i in range(len(years)):
         for j in range(i + 1, len(years)):
@@ -367,14 +383,15 @@ for veg_type, col_name in [('Understory', 'understory_temp_mean'), ('Birch', 'bi
             d1 = d1.loc[common_doys]
             d2 = d2.loc[common_doys]
 
-            # Use paired test because values are matched by DOY
-            t_stat, p_value = stats.ttest_rel(d1, d2, alternative='less')
-            print(f"  Year {year1} vs Year {year2}: n_days={len(common_doys)}, t-statistic = {t_stat:.3f}, p-value = {p_value:.3e}")
+            # Wilcoxon signed-rank test (paired, non-parametric)
+            w_stat, p_value = stats.wilcoxon(d1, d2)
+            print(f"  Year {year1} vs Year {year2}: n_days={len(common_doys)}, Wilcoxon statistic = {w_stat:.3f}, p-value = {p_value:.3e}")
             if p_value < 0.05:
-                print(f"    -> Significant difference in {veg_type} temperature and year {year1} < {year2} (p < 0.05)")
+                print(f"    -> Significant difference in {veg_type} temperature between years (p < 0.05)")
                 print(f"       Year {year1} mean = {d1.mean():.2f} °C, std = {d1.std():.2f}; Year {year2} mean = {d2.mean():.2f} °C, std = {d2.std():.2f}")
             else:
-                print(f"    -> No significant difference in {veg_type} temperature (p >= 0.05)")
+                print(f"    -> No significant difference in {veg_type} temperature between years (p >= 0.05)")
+
 #%% convert data to daily averages
 daily_daytime_df = daytime_df.groupby(['imgroup', 'year', 'doys']).agg({
     'green_ratio': 'mean',
@@ -386,16 +403,24 @@ daily_daytime_df = daytime_df.groupby(['imgroup', 'year', 'doys']).agg({
     'birch_temp_mean': 'mean'
 }).reset_index()
 
-#%% statistical test to compare daily temperature between understory and birch in different years
+#%% statistical test to compare daily temperature between understory and birch in different years (Wilcoxon signed-rank test, paired by DOY)
 for year in sorted(daily_daytime_df['year'].dropna().unique()):
-    understory_temps = daily_daytime_df[daily_daytime_df['year'] == year]['understory_temp_mean'].dropna()
-    birch_temps = daily_daytime_df[daily_daytime_df['year'] == year]['birch_temp_mean'].dropna()
-    t_stat, p_value = stats.ttest_ind(understory_temps, birch_temps, equal_var=False)
-    print(f"(Daily Avg) Year {year}: t-statistic = {t_stat:.3f}, p-value = {p_value:.3e}")
+    df_year = daily_daytime_df[daily_daytime_df['year'] == year][['doys', 'understory_temp_mean', 'birch_temp_mean']].dropna()
+    common_doys = np.intersect1d(
+        df_year['doys'][df_year['understory_temp_mean'].notna()],
+        df_year['doys'][df_year['birch_temp_mean'].notna()]
+    )
+    if len(common_doys) < 2:
+        print(f"(Daily Avg) Year {year}: insufficient paired data for Wilcoxon test")
+        continue
+    understory_temps = df_year[df_year['doys'].isin(common_doys)].sort_values('doys')['understory_temp_mean']
+    birch_temps = df_year[df_year['doys'].isin(common_doys)].sort_values('doys')['birch_temp_mean']
+    w_stat, p_value = stats.wilcoxon(understory_temps, birch_temps)
+    print(f"(Daily Avg) Year {year}: Wilcoxon statistic = {w_stat:.3f}, p-value = {p_value:.3e}")
     if p_value < 0.05:
-        print(f"  -> Significant difference in daily avg temperatures between Understory and Birch (p < 0.05)")
+        print(f"  -> Significant difference in daily avg paired temperatures between Understory and Birch (p < 0.05)")
         print(f"     Understory mean = {understory_temps.mean():.2f}, Birch mean = {birch_temps.mean():.2f}")
         print(f"     Understory std = {understory_temps.std():.2f}, Birch std = {birch_temps.std():.2f}")
     else:
-        print(f"  -> No significant difference in daily avg temperatures between Understory and Birch (p >= 0.05)")
+        print(f"  -> No significant difference in daily avg paired temperatures between Understory and Birch (p >= 0.05)")
 # %%
