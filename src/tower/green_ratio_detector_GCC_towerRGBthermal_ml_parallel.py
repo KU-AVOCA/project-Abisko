@@ -32,12 +32,16 @@ from sklearn.mixture import GaussianMixture
 from sklearn.cluster import DBSCAN, SpectralClustering
 from sklearn.preprocessing import StandardScaler
 from sklearn.neighbors import KNeighborsClassifier
+import pickle  # Add this import
 
 sns.set_theme(style="darkgrid", font_scale=1.5)
 
 #%%
 # Set the classification method to use
-classification_method = "kmeans"  # Options: "kmeans", "gmm", "dbscan", "spectral"
+classification_method = "supervised"  # Options: "kmeans", "gmm", "dbscan", "spectral", "supervised"
+
+# Path to trained model
+SUPERVISED_MODEL_PATH = "src/tower/vegetation_classifier.pkl"  # Update this path as needed
 
 # Set number of parallel processes (None = use all CPUs, or specify a number)
 NUM_PROCESSES = 15#cpu_count() - 170  # Leave 170 CPUs free
@@ -45,7 +49,7 @@ NUM_PROCESSES = 15#cpu_count() - 170  # Leave 170 CPUs free
 #%% Global paths (need to be global for multiprocessing)
 rgbfolder = '/data/shunan/data/KU/rgbimages/'
 thermalfolder = '/data_3/shunan_2/KU/registeredMatImages/'
-imoutfolder = '/data_3/shunan_2/KU/Data_greenes_thermal_38_' + classification_method + '_mean'
+imoutfolder = '/data_3/shunan_2/KU/Data_greenes_thermal_RF_' + classification_method 
 
 #%% Create output directories
 if not os.path.exists(imoutfolder):
@@ -129,7 +133,147 @@ def mask_and_crop_image(img):
         img = img[buffer:-buffer, buffer:-buffer]
     return img
 
-# ...existing code... (include all your quantify_vegetation functions here)
+# Add new function to load supervised model
+def load_supervised_model(model_path):
+    """Load the trained supervised classifier"""
+    try:
+        with open(model_path, 'rb') as f:
+            model_data = pickle.load(f)
+        
+        if isinstance(model_data, dict):
+            classifier = model_data['classifier']
+            print(f"Loaded supervised model with {model_data.get('n_samples', 'unknown')} training samples")
+            print(f"Training accuracy: {model_data.get('training_accuracy', 'unknown'):.4f}")
+            print(f"Test accuracy: {model_data.get('test_accuracy', 'unknown'):.4f}")
+        else:
+            classifier = model_data
+            print("Loaded supervised model (legacy format)")
+        
+        return classifier
+    except Exception as e:
+        print(f"Error loading supervised model: {e}")
+        return None
+
+def quantify_vegetation_supervised(img_rgb, img_thermal, classifier):
+    """Quantifies green vegetation using supervised Random Forest classifier."""
+    try:
+        # Calculate greenness for initial green mask
+        b, g, r = cv2.split(img_rgb)
+        b, g, r = b.astype(float), g.astype(float), r.astype(float)
+        greenness = g / (r + g + b + 1e-10)
+        threshold = 0.38
+        green_mask = (greenness > threshold).astype(np.uint8) * 255
+        
+        green_pixels = np.sum(green_mask > 0)
+        total_pixels = img_rgb.shape[0] * img_rgb.shape[1]
+        green_ratio = green_pixels / total_pixels if total_pixels > 0 else 0
+        
+        green_pixels_mask = green_mask > 0
+        if green_pixels > 0:
+            mean_greenness = np.mean(greenness[green_pixels_mask])
+            std_greenness = np.std(greenness[green_pixels_mask])
+            norm_greenness = np.sum(greenness[green_pixels_mask]) / green_pixels
+            mean_temperature = np.nanmean(img_thermal[green_pixels_mask])
+            std_temperature = np.nanstd(img_thermal[green_pixels_mask])
+        else:
+            mean_greenness = 0
+            std_greenness = 0
+            norm_greenness = 0
+            mean_temperature = np.nan
+            std_temperature = np.nan
+
+        green_metrics = {
+            'ratio': green_ratio,
+            'mean': mean_greenness,
+            'std': std_greenness,
+            'norm_greenness': norm_greenness,
+            'mean_temperature': mean_temperature,
+            'std_temperature': std_temperature
+        }
+        
+        masked_green = cv2.bitwise_and(img_rgb, img_rgb, mask=(green_mask // 255).astype(np.uint8))
+        non_zero_mask = np.any(masked_green != 0, axis=2)
+        
+        class1_metrics = {'ratio': 0, 'mean': 0, 'std': 0, 'norm_greenness': 0}
+        class2_metrics = {'ratio': 0, 'mean': 0, 'std': 0, 'norm_greenness': 0}
+        visualization = np.zeros_like(img_rgb)
+        
+        if np.sum(non_zero_mask) > 0 and classifier is not None:
+            # Convert to LAB color space for classification
+            lab_image = cv2.cvtColor(masked_green, cv2.COLOR_BGR2LAB)
+            pixels = lab_image[non_zero_mask].reshape(-1, 3).astype(np.float32)
+            
+            # Predict classes using Random Forest
+            labels = classifier.predict(pixels)
+            
+            # Create full label map
+            full_labels = np.full(img_rgb.shape[:2], -1, dtype=int)
+            full_labels[non_zero_mask] = labels
+            
+            # Separate birch (class 0) and understory (class 1)
+            # Non-green (class 2) is excluded by the green mask
+            class1_mask = (full_labels == 0)  # Birch
+            class2_mask = (full_labels == 1)  # Understory
+            
+            class1_pixels = np.sum(class1_mask)
+            class2_pixels = np.sum(class2_mask)
+            class1_ratio = class1_pixels / total_pixels if total_pixels > 0 else 0
+            class2_ratio = class2_pixels / total_pixels if total_pixels > 0 else 0
+            
+            if class1_pixels > 0:
+                class1_mean = np.mean(greenness[class1_mask])
+                class1_std = np.std(greenness[class1_mask])
+                class1_norm_greenness = np.sum(greenness[class1_mask]) / class1_pixels
+                class1_mean_temperature = np.nanmean(img_thermal[class1_mask])
+                class1_std_temperature = np.nanstd(img_thermal[class1_mask])
+            else:
+                class1_mean = 0
+                class1_std = 0
+                class1_norm_greenness = 0
+                class1_mean_temperature = np.nan
+                class1_std_temperature = np.nan
+
+            if class2_pixels > 0:
+                class2_mean = np.mean(greenness[class2_mask])
+                class2_std = np.std(greenness[class2_mask])
+                class2_norm_greenness = np.sum(greenness[class2_mask]) / class2_pixels
+                class2_mean_temperature = np.nanmean(img_thermal[class2_mask])
+                class2_std_temperature = np.nanstd(img_thermal[class2_mask])
+            else:
+                class2_mean = 0
+                class2_std = 0
+                class2_norm_greenness = 0
+                class2_mean_temperature = np.nan
+                class2_std_temperature = np.nan
+                
+            class1_metrics = {
+                'ratio': class1_ratio,
+                'mean': class1_mean,
+                'std': class1_std,
+                'norm_greenness': class1_norm_greenness,
+                'mean_temperature': class1_mean_temperature,
+                'std_temperature': class1_std_temperature
+            }
+            class2_metrics = {
+                'ratio': class2_ratio,
+                'mean': class2_mean,
+                'std': class2_std,
+                'norm_greenness': class2_norm_greenness,
+                'mean_temperature': class2_mean_temperature,
+                'std_temperature': class2_std_temperature
+            }
+            
+            # Create visualization (Birch=Red, Understory=Green)
+            visualization = np.zeros_like(img_rgb)
+            visualization[class1_mask] = [255, 0, 0]  # Red for Birch
+            visualization[class2_mask] = [0, 255, 0]  # Green for Understory
+        
+        return green_metrics, green_mask, class1_metrics, class2_metrics, visualization
+
+    except Exception as e:
+        print(f"Error in supervised classification: {e}")
+        return None, None, None, None, None
+
 # I'll include the kmeans one as example, add the others similarly
 
 def quantify_vegetation_kmeans(img_rgb, img_thermal):
@@ -250,9 +394,14 @@ def quantify_vegetation_kmeans(img_rgb, img_thermal):
 
 # Add your other quantify_vegetation_* functions here (gmm, dbscan, spectral)
 
-def quantify_vegetation(img_rgb, img_thermal, method="kmeans"):
+def quantify_vegetation(img_rgb, img_thermal, method="kmeans", classifier=None):
     """Wrapper function for vegetation quantification"""
-    if method == "kmeans":
+    if method == "supervised":
+        if classifier is None:
+            print("Warning: No classifier provided for supervised method, falling back to kmeans")
+            return quantify_vegetation_kmeans(img_rgb, img_thermal)
+        return quantify_vegetation_supervised(img_rgb, img_thermal, classifier)
+    elif method == "kmeans":
         return quantify_vegetation_kmeans(img_rgb, img_thermal)
     # Add other methods here
     else:
@@ -282,7 +431,7 @@ def process_single_rgb_image(args):
     Process a single RGB image with its matching thermal images.
     This function is called in parallel for each RGB image.
     """
-    rgb_file, imthermalfiles_df, classification_method = args
+    rgb_file, imthermalfiles_df, classification_method, classifier = args
     
     results = []  # Store results for this RGB image
     
@@ -303,7 +452,7 @@ def process_single_rgb_image(args):
         # Build vegetation masks once from RGB
         dummy_thermal = np.full(img_rgb.shape[:2], np.nan, dtype=float)
         green_metrics, green_mask, class1_metrics, class2_metrics, class_vis = quantify_vegetation(
-            img_rgb, dummy_thermal, method=classification_method
+            img_rgb, dummy_thermal, method=classification_method, classifier=classifier
         )
         
         if green_metrics is None:
@@ -438,6 +587,7 @@ def process_single_rgb_image(args):
             axes[1].axis('off')
             
             axes[2].imshow(class_vis_rgb)
+            class_label = "Birch/Understory" if classification_method == "supervised" else "Class1/Class2"
             axes[2].set_title(
                 f"Vegetation Classes ({classification_method})\n"
                 f"class1={c1m['ratio']:.2f} (Temp={c1m['mean_temperature']:.2f}±{c1m['std_temperature']:.2f})\n"
@@ -445,10 +595,16 @@ def process_single_rgb_image(args):
             )
             axes[2].axis('off')
             
-            legend_elements = [
-                Patch(facecolor='blue', edgecolor='black', label='Class 1'),
-                Patch(facecolor='green', edgecolor='black', label='Class 2')
-            ]
+            if classification_method == "supervised":
+                legend_elements = [
+                    Patch(facecolor='red', edgecolor='black', label='Birch'),
+                    Patch(facecolor='green', edgecolor='black', label='Understory')
+                ]
+            else:
+                legend_elements = [
+                    Patch(facecolor='blue', edgecolor='black', label='Class 1'),
+                    Patch(facecolor='green', edgecolor='black', label='Class 2')
+                ]
             axes[2].legend(handles=legend_elements, loc='lower center',
                            bbox_to_anchor=(0.5, -0.4), frameon=True,
                            facecolor='white', edgecolor='black')
@@ -478,6 +634,16 @@ def process_single_rgb_image(args):
 #%% Main execution
 if __name__ == '__main__':
     print(f"Using {NUM_PROCESSES} parallel processes")
+    print(f"Classification method: {classification_method}")
+    
+    # Load supervised classifier if needed
+    classifier = None
+    if classification_method == "supervised":
+        print(f"\nLoading supervised model from {SUPERVISED_MODEL_PATH}...")
+        classifier = load_supervised_model(SUPERVISED_MODEL_PATH)
+        if classifier is None:
+            print("ERROR: Could not load supervised model. Exiting.")
+            exit(1)
     
     # Load RGB images
     imrgbfiles = []
@@ -508,7 +674,7 @@ if __name__ == '__main__':
         f.write('filename,datetime,green_ratio,green_mean,green_std,green_norm,class1_ratio,class1_mean,class1_std,class1_norm,class2_ratio,class2_mean,class2_std,class2_norm,class1_temp_mean,class1_temp_std,class2_temp_mean,class2_temp_std,time_diff_sec,method,mask_file\n')
     
     # Prepare arguments for parallel processing
-    args_list = [(rgb_file, imthermalfiles_df, classification_method) for rgb_file in imrgbfiles]
+    args_list = [(rgb_file, imthermalfiles_df, classification_method, classifier) for rgb_file in imrgbfiles]
     
     # Process in parallel with progress bar
     all_results = []

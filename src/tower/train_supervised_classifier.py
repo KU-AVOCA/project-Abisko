@@ -20,7 +20,7 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report, confusion_matrix
 import seaborn as sns
-import pandas as pd
+import pandas as pdn
 from PIL import Image
 from PIL.ExifTags import TAGS
 import datetime
@@ -40,6 +40,7 @@ class PixelSelector:
         self.current_class = 'birch'
         self.image = None
         self.lab_image = None
+        self.current_image_path = None  # Add this line
         
     def mouse_callback(self, event, x, y, flags, param):
         """Callback for mouse clicks to select pixels"""
@@ -51,26 +52,28 @@ class PixelSelector:
             pixel_info = {
                 'lab': lab_value,
                 'rgb': rgb_value,
-                'position': (x, y)
+                'position': (x, y),
+                'image_path': self.current_image_path  # Add this line
             }
             
             if self.current_class == 'birch':
                 self.birch_pixels.append(pixel_info)
                 cv2.circle(self.display_image, (x, y), 3, (0, 255, 0), -1)
-                print(f"Birch pixel {len(self.birch_pixels)}: LAB={lab_value}")
+                print(f"Birch pixel {len(self.birch_pixels)}: LAB={lab_value}, Position=({x}, {y})")
             elif self.current_class == 'understory':
                 self.understory_pixels.append(pixel_info)
                 cv2.circle(self.display_image, (x, y), 3, (255, 0, 0), -1)
-                print(f"Understory pixel {len(self.understory_pixels)}: LAB={lab_value}")
+                print(f"Understory pixel {len(self.understory_pixels)}: LAB={lab_value}, Position=({x}, {y})")
             elif self.current_class == 'nongreen':
                 self.nongreen_pixels.append(pixel_info)
                 cv2.circle(self.display_image, (x, y), 3, (0, 0, 255), -1)
-                print(f"Non-green pixel {len(self.nongreen_pixels)}: LAB={lab_value}")
+                print(f"Non-green pixel {len(self.nongreen_pixels)}: LAB={lab_value}, Position=({x}, {y})")
             
             cv2.imshow('Image', self.display_image)
     
     def select_pixels_from_image(self, image_path):
         """Interactive pixel selection from a single image"""
+        self.current_image_path = image_path  # Add this line
         self.image = cv2.imread(image_path)
         if self.image is None:
             print(f"Could not read image: {image_path}")
@@ -228,6 +231,7 @@ def collect_training_data(image_files, n_images=100, output_file='training_data.
     
     # Randomly select n_images
     n_to_select = min(n_images, len(image_files))
+    np.random.seed(42)  # Set seed for reproducibility
     selected_images = np.random.choice(image_files, n_to_select, replace=False)
     
     print(f"\n{'='*60}")
@@ -282,18 +286,34 @@ def train_classifier(training_data_file='training_data.pkl', output_model='veget
     # Prepare features and labels
     X = []
     y = []
+    pixel_metadata = []  # Add this line to store metadata
     
     for pixel in training_data['birch']:
         X.append(pixel['lab'])
         y.append(0)  # Birch = 0
+        pixel_metadata.append({
+            'class': 'birch',
+            'position': pixel.get('position', None),
+            'image_path': pixel.get('image_path', None)
+        })
     
     for pixel in training_data['understory']:
         X.append(pixel['lab'])
         y.append(1)  # Understory = 1
+        pixel_metadata.append({
+            'class': 'understory',
+            'position': pixel.get('position', None),
+            'image_path': pixel.get('image_path', None)
+        })
     
     for pixel in training_data['nongreen']:
         X.append(pixel['lab'])
         y.append(2)  # Non-green = 2
+        pixel_metadata.append({
+            'class': 'nongreen',
+            'position': pixel.get('position', None),
+            'image_path': pixel.get('image_path', None)
+        })
     
     X = np.array(X)
     y = np.array(y)
@@ -310,9 +330,9 @@ def train_classifier(training_data_file='training_data.pkl', output_model='veget
         print(f"\nWARNING: Very few samples for at least one class (min={min_samples})")
         print("Consider collecting more training data for better results.")
     
-    # Split data
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=42, stratify=y
+    # Split data (also split metadata)
+    X_train, X_test, y_train, y_test, meta_train, meta_test = train_test_split(
+        X, y, pixel_metadata, test_size=0.2, random_state=42, stratify=y
     )
     
     print(f"\nTraining set: {len(X_train)} samples")
@@ -365,7 +385,7 @@ def train_classifier(training_data_file='training_data.pkl', output_model='veget
     plt.savefig('feature_importance.png', dpi=150)
     print("Feature importance plot saved to feature_importance.png")
     
-    # Save model
+    # Save model (with metadata)
     model_data = {
         'classifier': clf,
         'training_accuracy': train_score,
@@ -375,7 +395,8 @@ def train_classifier(training_data_file='training_data.pkl', output_model='veget
             'birch': np.sum(y==0),
             'understory': np.sum(y==1),
             'nongreen': np.sum(y==2)
-        }
+        },
+        'pixel_metadata': pixel_metadata  # Add this line to save all metadata
     }
     
     with open(output_model, 'wb') as f:
@@ -389,7 +410,7 @@ def train_classifier(training_data_file='training_data.pkl', output_model='veget
 
 if __name__ == "__main__":
     # Set paths
-    rgbfolder = '/mnt/i/SCIENCE-IGN-ALL/AVOCA_Group/1_Personal_folders/1_Simon/1_Abisko/6_Tower_Data/Tower RGB images/1 Data/1 Years'
+    rgbfolder = r"C:\Users\au686295\GitHub\data\KU"
     
     print(f"\n{'='*60}")
     print("Supervised Vegetation Classifier Training")
