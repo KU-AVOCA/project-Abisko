@@ -1,7 +1,8 @@
 """
-Green Ratio Detector for Vegetation Analysis with Random Forest Classification (Parallel Version)
+Green Ratio Detector for Vegetation Analysis with Random Forest Classification (Parallel Version - RF Only)
 
-This script uses a trained Random Forest classifier to distinguish birch and understory vegetation.
+This script uses a trained Random Forest classifier to distinguish birch, understory, and non-green areas.
+No GCC threshold preprocessing - relies entirely on RF classification.
 Uses multiprocessing to process multiple RGB images simultaneously.
 
 Author: Shunan Feng (shf@ign.ku.dk)
@@ -48,7 +49,7 @@ NON_GREEN_COLOR_HEX = '#000000'
 #%% Global paths
 rgbfolder = '/data/shunan/data/KU/rgbimages/'
 thermalfolder = '/data_3/shunan_2/KU/registeredMatImages/'
-imoutfolder = '/data_3/shunan_2/KU/Data_greennes_thermal_RF_supervised' 
+imoutfolder = '/data_3/shunan_2/KU/Data_greennes_thermal_RF_supervised_rfonly' 
 
 #%% Create output directories
 if not os.path.exists(imoutfolder):
@@ -62,7 +63,7 @@ masks_dir = os.path.join(results_dir, 'classification_masks')
 if not os.path.exists(masks_dir):
     os.makedirs(masks_dir)
 
-csv_path = os.path.join(results_dir, 'green_ratio_thermal_RF_supervised.csv')
+csv_path = os.path.join(results_dir, 'green_ratio_thermal_RF_supervised_rfonly.csv')
 
 #%% Helper functions
 def get_image_rgb_datetime(image_path):
@@ -152,35 +153,57 @@ def load_supervised_model(model_path):
         print(f"Error loading Random Forest model: {e}")
         return None
 
-def quantify_vegetation_supervised(img_rgb, img_thermal, classifier):
+def quantify_vegetation_rf_only(img_rgb, img_thermal, classifier):
     """
-    Quantifies vegetation using supervised Random Forest classifier.
+    Quantifies vegetation using only Random Forest classifier (no GCC preprocessing).
     
     Classes:
     - Birch (class 0): Typically brighter, higher L* values in LAB space
     - Understory (class 1): Typically darker vegetation
-    - Non-green (class 2): Not used in final classification (filtered by green mask)
+    - Non-green (class 2): Non-vegetation areas
     """
     try:
-        # Calculate greenness for initial green mask
+        # Convert entire image to LAB color space
+        lab_image = cv2.cvtColor(img_rgb, cv2.COLOR_BGR2LAB)
+        
+        # Reshape all pixels for classification
+        h, w = img_rgb.shape[:2]
+        pixels = lab_image.reshape(-1, 3).astype(np.float32)
+        
+        # Predict classes using Random Forest for all pixels
+        labels = classifier.predict(pixels)
+        
+        # Reshape back to image dimensions
+        label_map = labels.reshape(h, w)
+        
+        # Create masks for each class
+        birch_mask = (label_map == 0)
+        understory_mask = (label_map == 1)
+        non_green_mask = (label_map == 2)
+        green_mask = (birch_mask | understory_mask)  # Combined green vegetation
+        
+        # Calculate greenness for all pixels (for metrics)
         b, g, r = cv2.split(img_rgb)
         b, g, r = b.astype(float), g.astype(float), r.astype(float)
         greenness = g / (r + g + b + 1e-10)
-        threshold = 0.38
-        green_mask = (greenness > threshold).astype(np.uint8) * 255
         
-        green_pixels = np.sum(green_mask > 0)
-        total_pixels = img_rgb.shape[0] * img_rgb.shape[1]
+        # Calculate pixel counts and ratios
+        total_pixels = h * w
+        birch_pixels = np.sum(birch_mask)
+        understory_pixels = np.sum(understory_mask)
+        green_pixels = np.sum(green_mask)
+        
+        birch_ratio = birch_pixels / total_pixels if total_pixels > 0 else 0
+        understory_ratio = understory_pixels / total_pixels if total_pixels > 0 else 0
         green_ratio = green_pixels / total_pixels if total_pixels > 0 else 0
         
         # Compute overall green metrics
-        green_pixels_mask = green_mask > 0
         if green_pixels > 0:
-            mean_greenness = np.mean(greenness[green_pixels_mask])
-            std_greenness = np.std(greenness[green_pixels_mask])
-            norm_greenness = np.sum(greenness[green_pixels_mask]) / green_pixels
-            mean_temperature = np.nanmean(img_thermal[green_pixels_mask])
-            std_temperature = np.nanstd(img_thermal[green_pixels_mask])
+            mean_greenness = np.mean(greenness[green_mask])
+            std_greenness = np.std(greenness[green_mask])
+            norm_greenness = np.sum(greenness[green_mask]) / green_pixels
+            mean_temperature = np.nanmean(img_thermal[green_mask])
+            std_temperature = np.nanstd(img_thermal[green_mask])
         else:
             mean_greenness = 0
             std_greenness = 0
@@ -197,85 +220,65 @@ def quantify_vegetation_supervised(img_rgb, img_thermal, classifier):
             'std_temperature': std_temperature
         }
         
-        # Apply green mask to RGB
-        masked_green = cv2.bitwise_and(img_rgb, img_rgb, mask=(green_mask // 255).astype(np.uint8))
-        non_zero_mask = np.any(masked_green != 0, axis=2)
+        # Compute birch metrics
+        if birch_pixels > 0:
+            birch_mean = np.mean(greenness[birch_mask])
+            birch_std = np.std(greenness[birch_mask])
+            birch_norm_greenness = np.sum(greenness[birch_mask]) / birch_pixels
+            birch_mean_temperature = np.nanmean(img_thermal[birch_mask])
+            birch_std_temperature = np.nanstd(img_thermal[birch_mask])
+        else:
+            birch_mean = 0
+            birch_std = 0
+            birch_norm_greenness = 0
+            birch_mean_temperature = np.nan
+            birch_std_temperature = np.nan
         
-        # Initialize birch and understory metrics
-        birch_metrics = {'ratio': 0, 'mean': 0, 'std': 0, 'norm_greenness': 0, 
-                        'mean_temperature': np.nan, 'std_temperature': np.nan}
-        understory_metrics = {'ratio': 0, 'mean': 0, 'std': 0, 'norm_greenness': 0,
-                             'mean_temperature': np.nan, 'std_temperature': np.nan}
+        birch_metrics = {
+            'ratio': birch_ratio,
+            'mean': birch_mean,
+            'std': birch_std,
+            'norm_greenness': birch_norm_greenness,
+            'mean_temperature': birch_mean_temperature,
+            'std_temperature': birch_std_temperature
+        }
         
-        # Initialize visualization with black background (non-green)
+        # Compute understory metrics
+        if understory_pixels > 0:
+            understory_mean = np.mean(greenness[understory_mask])
+            understory_std = np.std(greenness[understory_mask])
+            understory_norm_greenness = np.sum(greenness[understory_mask]) / understory_pixels
+            understory_mean_temperature = np.nanmean(img_thermal[understory_mask])
+            understory_std_temperature = np.nanstd(img_thermal[understory_mask])
+        else:
+            understory_mean = 0
+            understory_std = 0
+            understory_norm_greenness = 0
+            understory_mean_temperature = np.nan
+            understory_std_temperature = np.nan
+        
+        understory_metrics = {
+            'ratio': understory_ratio,
+            'mean': understory_mean,
+            'std': understory_std,
+            'norm_greenness': understory_norm_greenness,
+            'mean_temperature': understory_mean_temperature,
+            'std_temperature': understory_std_temperature
+        }
+        
+        # Create visualization with specified colors
         visualization = np.zeros_like(img_rgb)
-        visualization[:, :] = NON_GREEN_COLOR
+        visualization[birch_mask] = BIRCH_COLOR
+        visualization[understory_mask] = UNDERSTORY_COLOR
+        visualization[non_green_mask] = NON_GREEN_COLOR
         
-        if np.sum(non_zero_mask) > 0 and classifier is not None:
-            # Convert to LAB color space for classification
-            lab_image = cv2.cvtColor(masked_green, cv2.COLOR_BGR2LAB)
-            pixels = lab_image[non_zero_mask].reshape(-1, 3).astype(np.float32)
-            
-            # Predict classes using Random Forest
-            labels = classifier.predict(pixels)
-            
-            # Create full label map
-            full_labels = np.full(img_rgb.shape[:2], -1, dtype=int)
-            full_labels[non_zero_mask] = labels
-            
-            # Extract birch (class 0) and understory (class 1) masks
-            birch_mask = (full_labels == 0)
-            understory_mask = (full_labels == 1)
-            
-            # Calculate pixel counts and ratios
-            birch_pixels = np.sum(birch_mask)
-            understory_pixels = np.sum(understory_mask)
-            birch_ratio = birch_pixels / total_pixels if total_pixels > 0 else 0
-            understory_ratio = understory_pixels / total_pixels if total_pixels > 0 else 0
-            
-            # Compute birch metrics
-            if birch_pixels > 0:
-                birch_mean = np.mean(greenness[birch_mask])
-                birch_std = np.std(greenness[birch_mask])
-                birch_norm_greenness = np.sum(greenness[birch_mask]) / birch_pixels
-                birch_mean_temperature = np.nanmean(img_thermal[birch_mask])
-                birch_std_temperature = np.nanstd(img_thermal[birch_mask])
-                
-                birch_metrics = {
-                    'ratio': birch_ratio,
-                    'mean': birch_mean,
-                    'std': birch_std,
-                    'norm_greenness': birch_norm_greenness,
-                    'mean_temperature': birch_mean_temperature,
-                    'std_temperature': birch_std_temperature
-                }
-            
-            # Compute understory metrics
-            if understory_pixels > 0:
-                understory_mean = np.mean(greenness[understory_mask])
-                understory_std = np.std(greenness[understory_mask])
-                understory_norm_greenness = np.sum(greenness[understory_mask]) / understory_pixels
-                understory_mean_temperature = np.nanmean(img_thermal[understory_mask])
-                understory_std_temperature = np.nanstd(img_thermal[understory_mask])
-                
-                understory_metrics = {
-                    'ratio': understory_ratio,
-                    'mean': understory_mean,
-                    'std': understory_std,
-                    'norm_greenness': understory_norm_greenness,
-                    'mean_temperature': understory_mean_temperature,
-                    'std_temperature': understory_std_temperature
-                }
-            
-            # Create visualization with specified colors
-            # Birch = #73ac31, Understory = #cdcdcd, Non-green = Black
-            visualization[birch_mask] = BIRCH_COLOR
-            visualization[understory_mask] = UNDERSTORY_COLOR
+        # Create green mask for compatibility (uint8, 0 or 255)
+        green_mask_uint8 = (green_mask.astype(np.uint8) * 255)
         
-        return green_metrics, green_mask, birch_metrics, understory_metrics, visualization
+        return green_metrics, green_mask_uint8, birch_metrics, understory_metrics, visualization
 
     except Exception as e:
-        print(f"Error in supervised classification: {e}")
+        print(f"Error in RF-only classification: {e}")
         return None, None, None, None, None
 
 def func_compute_thermal_stats_from_masks(img_thermal, green_mask, birch_mask, understory_mask):
@@ -320,17 +323,16 @@ def process_single_rgb_image(args):
         # Crop RGB
         img_rgb = mask_and_crop_image(img=img_rgb)
         
-        # Build vegetation masks once from RGB
+        # Build vegetation masks using RF only (no thermal needed yet)
         dummy_thermal = np.full(img_rgb.shape[:2], np.nan, dtype=float)
-        green_metrics, green_mask, birch_metrics, understory_metrics, class_vis = quantify_vegetation_supervised(
+        green_metrics, green_mask, birch_metrics, understory_metrics, class_vis = quantify_vegetation_rf_only(
             img_rgb, dummy_thermal, classifier
         )
         
         if green_metrics is None:
             return []
         
-        # Extract birch and understory masks
-        # Birch is #73ac31 (115, 172, 49), Understory is #cdcdcd (205, 205, 205)
+        # Extract birch and understory masks from visualization
         birch_mask = (class_vis[:, :, 0] == BIRCH_COLOR[0]) & (class_vis[:, :, 1] == BIRCH_COLOR[1]) & (class_vis[:, :, 2] == BIRCH_COLOR[2])
         understory_mask = (class_vis[:, :, 0] == UNDERSTORY_COLOR[0]) & (class_vis[:, :, 1] == UNDERSTORY_COLOR[1]) & (class_vis[:, :, 2] == UNDERSTORY_COLOR[2])
         
@@ -401,7 +403,7 @@ def process_single_rgb_image(args):
             # Save masks
             base_rgb = datetime_str.replace(':', '-').replace(' ', '_') if datetime_str != "NA" else os.path.splitext(os.path.basename(rgb_file))[0]
             base_therm = therm_dt_str.replace(':', '-').replace(' ', '_') if therm_dt_str != "NA" else os.path.splitext(os.path.basename(thermal_file))[0]
-            mask_filename = f"{base_rgb}__therm_{base_therm}_RF_masks.mat"
+            mask_filename = f"{base_rgb}__therm_{base_therm}_RF_rfonly_masks.mat"
             mask_filepath = os.path.join(masks_dir, mask_filename)
             
             savemat(mask_filepath, {
@@ -411,7 +413,7 @@ def process_single_rgb_image(args):
                 'metadata': {
                     'datetime_rgb': datetime_str,
                     'datetime_thermal': therm_dt_str,
-                    'method': 'Random Forest',
+                    'method': 'Random Forest (RF Only)',
                     'rgb_file': rgb_file,
                     'thermal_file': thermal_file,
                     'green_ratio': gm['ratio'],
@@ -443,7 +445,7 @@ def process_single_rgb_image(args):
                 'understory_temp_mean': um["mean_temperature"],
                 'understory_temp_std': um["std_temperature"],
                 'time_diff_sec': time_diff_seconds,
-                'method': 'Random Forest',
+                'method': 'Random Forest (RF Only)',
                 'mask_file': mask_filename
             }
             results.append(result)
@@ -455,21 +457,16 @@ def process_single_rgb_image(args):
             axes[0].axis('off')
             
             axes[1].imshow(masked_img_rgb)
-            axes[1].set_title(f"Green Masked (GR={gm['ratio']:.2f}, Norm={gm['norm_greenness']:.2f})")
+            axes[1].set_title(f"Green Vegetation (RF)\nGR={gm['ratio']:.2f}, Norm={gm['norm_greenness']:.2f}")
             axes[1].axis('off')
             
             axes[2].imshow(class_vis_rgb)
             axes[2].set_title(
-                f"Vegetation Classes (Random Forest)\n"
+                f"Vegetation Classes (RF Only)\n"
                 f"Birch={bm['ratio']:.2f} (Temp={bm['mean_temperature']:.2f}±{bm['std_temperature']:.2f}°C)\n"
                 f"Understory={um['ratio']:.2f} (Temp={um['mean_temperature']:.2f}±{um['std_temperature']:.2f}°C)"
             )
             axes[2].axis('off')
-            
-            # Convert RGB to normalized RGB for matplotlib patches
-            # birch_color_norm = tuple(c / 255.0 for c in BIRCH_COLOR)
-            # understory_color_norm = tuple(c / 255.0 for c in UNDERSTORY_COLOR)
-            # non_green_color_norm = tuple(c / 255.0 for c in NON_GREEN_COLOR)
             
             legend_elements = [
                 Patch(facecolor=BIRCH_COLOR_HEX, edgecolor='black', label='Birch'),
@@ -492,7 +489,7 @@ def process_single_rgb_image(args):
             os.makedirs(output_dir, exist_ok=True)
             base_plot = base_rgb + f"__therm_{base_therm}"
             extension = os.path.splitext(os.path.basename(rgb_file))[1]
-            output_path = os.path.join(output_dir, f"{base_plot}_green_masked{extension}")
+            output_path = os.path.join(output_dir, f"{base_plot}_rf_classified{extension}")
             fig.savefig(output_path, dpi=100)
             plt.close(fig)
     
@@ -505,7 +502,7 @@ def process_single_rgb_image(args):
 #%% Main execution
 if __name__ == '__main__':
     print(f"Using {NUM_PROCESSES} parallel processes")
-    print(f"Classification method: Random Forest (Supervised)")
+    print(f"Classification method: Random Forest (RF Only - No GCC preprocessing)")
     print(f"Color scheme: Birch=#73ac31, Understory=#cdcdcd, Non-green=Black")
     
     # Load Random Forest classifier

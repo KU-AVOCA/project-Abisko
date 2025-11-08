@@ -74,28 +74,28 @@ def is_daytime(row, min_elevation=5.0):
         return False
 
 #%% Load and process data
-csvfile = "/mnt/i/SCIENCE-IGN-ALL/AVOCA_Group/2_Shared_folders/5_Projects/2025Abisko/Tower_RGB_Thermal_Analysis/Data_greenes_thermal_kmeans_mean/results/green_ratio_thermal_kmeans.csv"
+csvfile = "/data_3/shunan_2/KU/Data_greenness_thermal_RF_supervised/results/green_ratio_thermal_RF_supervised_rfonly.csv"
 df = pd.read_csv(csvfile)
 
 # Rename columns for clarity
-df.rename(
-    columns={
-        'class1_ratio': 'understory_ratio',
-        'class1_mean': 'understory_mean',
-        'class1_std': 'understory_std',
-        'class1_norm': 'understory_norm',
-        'class2_ratio': 'birch_ratio',
-        'class2_mean': 'birch_mean',
-        'class2_std': 'birch_std',
-        'class2_norm': 'birch_norm',
+# df.rename(
+#     columns={
+#         'class1_ratio': 'understory_ratio',
+#         'class1_mean': 'understory_mean',
+#         'class1_std': 'understory_std',
+#         'class1_norm': 'understory_norm',
+#         'class2_ratio': 'birch_ratio',
+#         'class2_mean': 'birch_mean',
+#         'class2_std': 'birch_std',
+#         'class2_norm': 'birch_norm',
 
-        'class1_temp_mean': 'understory_temp_mean',
-        'class1_temp_std': 'understory_temp_std',
-        'class2_temp_mean': 'birch_temp_mean',
-        'class2_temp_std': 'birch_temp_std'
-    },
-    inplace=True
-)
+#         'class1_temp_mean': 'understory_temp_mean',
+#         'class1_temp_std': 'understory_temp_std',
+#         'class2_temp_mean': 'birch_temp_mean',
+#         'class2_temp_std': 'birch_temp_std'
+#     },
+#     inplace=True
+# )
 
 # Convert datetime and extract components
 df['datetime'] = pd.to_datetime(df['datetime'], errors='coerce')
