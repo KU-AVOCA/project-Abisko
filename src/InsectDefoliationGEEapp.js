@@ -55,14 +55,14 @@ var defoliationVis = {min: -1, max: 0, palette: defoliationPalette};
 // Function to select bands and rename them
 function renamHLSS30(image) {
   return image.select(
-      ['B2',   'B3',    'B4',  'B6',    'Fmask'],
+      ['B2',   'B3',    'B4',  'B11',   'Fmask'],
       ['Blue', 'Green', 'Red', 'SWIR1', 'Fmask']
   );
 }
 
 function renamHLSL30(image) {
   return image.select(
-      ['B2',   'B3',    'B4',  'B11',   'Fmask'],
+      ['B2',   'B3',    'B4',  'B6',    'Fmask'],
       ['Blue', 'Green', 'Red', 'SWIR1', 'Fmask']
   );
 }

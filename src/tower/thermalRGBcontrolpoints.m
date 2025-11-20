@@ -38,18 +38,32 @@ rgbImageGray = im2gray(rgbImage);
 % These should be defined or loaded from previous session
 movingPointsAdjusted = cpcorr(movingPoints, fixedPoints, thermalImage, rgbImageGray);
 
-% Visualize control points on both images
-figure;
-imshow(rgbImage);
-hold on;
-plot(fixedPoints(:,1), fixedPoints(:,2), 'xr');
-title('Fixed Points on RGB Image');
+f1 = figure;
+% Visualize control points on both images in one figure with two subplots
+tiledlayout(1,2,'TileSpacing','compact','Padding','compact');
 
-figure;
-imshow(thermalImageNorm);
-hold on;
-plot(movingPointsAdjusted(:,1), movingPointsAdjusted(:,2), 'xr');
-title('Adjusted Moving Points on Thermal Image');
+% Subplot 1: fixed points on RGB image
+ax1 = nexttile;
+imshow(rgbImage, 'Parent', ax1);
+hold(ax1,'on');
+plot(ax1, fixedPoints(:,1), fixedPoints(:,2), 'o', ...
+    'MarkerSize',12, 'MarkerEdgeColor','k', 'MarkerFaceColor','r', 'LineWidth',1.5);
+title(ax1, 'a) Fixed Points on RGB Image');
+
+% Subplot 2: moving points before and after adjustment on thermal image
+ax2 = nexttile;
+imshow(thermalImageNorm, 'Parent', ax2);
+hold(ax2,'on');
+pBefore = plot(ax2, movingPoints(:,1), movingPoints(:,2), 's', ...
+    'MarkerSize',12, 'MarkerEdgeColor','k', 'MarkerFaceColor','y', 'LineWidth',1.5);
+pAfter  = plot(ax2, movingPointsAdjusted(:,1), movingPointsAdjusted(:,2), 'x', ...
+    'MarkerSize',12, 'MarkerEdgeColor','c', 'LineWidth',2);
+title(ax2, 'b) Moving Points: before (yellow) and after (cyan) adjustment');
+legend(ax2, [pBefore pAfter], {'Before adjustment','After adjustment'}, 'Location','best');
+
+fontsize(f1, 16, "points");
+exportgraphics(f1, "..\..\print\controlpoints.pdf", "Resolution", 300);
+exportgraphics(f1, "..\..\print\controlpoints.png", "Resolution", 300);
 
 %% 4. Fit geometric transformation
 % Choose transformation type: 'polynomial', 'projective', or 'pwl'
@@ -66,9 +80,12 @@ rgbImageSize = size(rgbImage);
 thermalRegistered = imwarp(thermalImage, tform, OutputView=imref2d(rgbImageSize));
 
 % Visualize registration results
-figure;
+f2 = figure;
 imshowpair(rgbImage, thermalRegistered, "blend");
 title('Registered Thermal and RGB Images (Blended)');
+fontsize(f2, 16, "points");
+exportgraphics(f2, "..\..\print\registered_blended.pdf", "Resolution", 300);
+exportgraphics(f2, "..\..\print\registered_blended.png", "Resolution", 300);
 
 figure;
 imshow(mat2gray(thermalRegistered));
@@ -89,9 +106,12 @@ rgbImageCropped = rgbImage(cropTop+1:end, :, :);
 thermalRegisteredCropped = thermalRegisteredCropped(buffer+1:end-buffer, buffer+1:end-buffer);
 rgbImageCropped = rgbImageCropped(buffer+1:end-buffer, buffer+1:end-buffer, :);
 
-figure;
-imshowpair(rgbImageCropped, thermalRegisteredCropped, "falsecolor");
-title('Cropped Registered Images (Falsecolor)');
+f3 = figure;
+imshowpair(rgbImageCropped, thermalRegisteredCropped, "blend");
+% title('Cropped Registered Images (Blended)');
+fontsize(f3, 16, "points");
+exportgraphics(f3, "..\..\print\registered_cropped_blended.pdf", "Resolution", 300);
+exportgraphics(f3, "..\..\print\registered_cropped_blended.png", "Resolution", 300);
 
 % %% 6. Save control points and transformation
 % save("tform_thermalRGB.mat", "tform", "movingPointsAdjusted", ...

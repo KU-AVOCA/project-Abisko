@@ -74,7 +74,7 @@ def is_daytime(row, min_elevation=5.0):
         return False
 
 #%% Load and process data
-csvfile = "/data_3/shunan_2/KU/Data_greenness_thermal_RF_supervised/results/green_ratio_thermal_RF_supervised_rfonly.csv"
+csvfile = "/mnt/i/SCIENCE-IGN-ALL/AVOCA_Group/2_Shared_folders/5_Projects/2025Abisko/Tower_RGB_Thermal_Analysis/Data_greenness_thermal_RF_supervised/results/green_ratio_thermal_RF_supervised_rfonly.csv"
 df = pd.read_csv(csvfile)
 
 # Rename columns for clarity
@@ -126,7 +126,120 @@ daytime_df = daytime_df.groupby(['imgroup', 'year', 'month', 'doys', 'datetime']
     'understory_temp_mean': 'median',
     'birch_temp_mean': 'median'
 }).reset_index()
+# restrict to doys between 150 and 230
+daytime_df = daytime_df[(daytime_df['doys'] >= 150) & (daytime_df['doys'] <= 230)]
+#%% compare the difference between birch and understory temperature by year
+# plot understory vs birch temperature separately for each year
+years = sorted(daytime_df['year'].dropna().unique())
+if len(years) == 0:
+    print("No yearly data to plot")
+else:
+    col_wrap = 3 if len(years) >= 3 else len(years)
+    g = sns.lmplot(
+        data=daytime_df,
+        x='understory_temp_mean',
+        y='birch_temp_mean',
+        col='year',
+        col_wrap=col_wrap,
+        height=8,
+        scatter_kws={'s': 20, 'alpha': 0.6},
+        line_kws={'color': 'red'},
+        ci=None,
+        sharex=False,
+        sharey=False
+    )
+    g.set_axis_labels('Understory mean temp (°C)', 'Birch mean temp (°C)')
 
+    # make x and y the same ratio: set equal limits and square aspect on each facet
+    df_plot = daytime_df[['understory_temp_mean', 'birch_temp_mean']].dropna()
+    if not df_plot.empty:
+        vmin = float(df_plot.min().min())
+        vmax = float(df_plot.max().max())
+        padding = (vmax - vmin) * 0.05 if vmax > vmin else 0.5
+        vmin -= padding
+        vmax += padding
+        for ax in g.axes.flatten():
+            ax.set_xlim(vmin, vmax)
+            ax.set_ylim(vmin, vmax)
+            ax.set_aspect('equal', adjustable='box')
+            # add 1:1 reference line
+            ax.plot([vmin, vmax], [vmin, vmax], color='gray', linestyle='--', linewidth=1.0, zorder=5)
+
+    plt.tight_layout()
+
+#%% compare the difference between birch and understory temperature by year
+daytime_df['temp_diff'] = daytime_df['birch_temp_mean'] - daytime_df['understory_temp_mean']
+fig, ax = plt.subplots(figsize=(8, 6))
+sns.lineplot(
+    data=daytime_df,
+    x='doys',
+    y='temp_diff',
+    hue='year',
+    ax=ax,
+    palette='deep'
+)
+ax.set(xlabel='Day of Year', ylabel='Birch - Understory Temp (°C)', title='Temperature Difference Over Time (Daytime Images Only)')
+ax.axhline(0, color='gray', linestyle='--', linewidth=1.0)
+ax.legend(title='Year', bbox_to_anchor=(1.05, 1), loc='upper left')
+ax.set_ylim(-1,1)
+plt.tight_layout()
+# plt.savefig('temp_difference_timeseries_daytime.png', dpi=300, bbox_inches='
+
+#%% normalize temperature by green ratio for understory and birch
+daytime_df['understory_temp_norm'] = daytime_df['understory_temp_mean'] * daytime_df['understory_ratio']
+daytime_df['birch_temp_norm'] = daytime_df['birch_temp_mean'] * daytime_df['birch_ratio']
+#%% Visualization - Overall normalized temperature distribution by year
+fig, ax = plt.subplots(figsize=(10, 6))
+temp_norm_df = daytime_df[['year', 'understory_temp_norm', 'birch_temp_norm']].melt(
+    id_vars='year', var_name='type', value_name='temp_norm'
+)
+temp_norm_df['type'] = temp_norm_df['type'].map({
+    'understory_temp_norm': 'Understory Temp Norm',
+    'birch_temp_norm': 'Birch Temp Norm'
+})
+sns.boxplot(data=temp_norm_df, x='year', y='temp_norm', hue='type', ax=ax, notch=True)
+ax.set(xlabel='Year', ylabel='Normalized Temperature (°C per Green Ratio)', title='Normalized Temperature by Year (Daytime Images Only)')
+ax.legend(title='')
+plt.tight_layout()
+# plt.savefig('temp_norm_by_year_daytime.png', dpi=300, bbox_inches='tight')
+
+#%%
+years = sorted(daytime_df['year'].dropna().unique())
+if len(years) == 0:
+    print("No yearly data to plot")
+else:
+    col_wrap = 3 if len(years) >= 3 else len(years)
+    g = sns.lmplot(
+        data=daytime_df,
+        x='understory_temp_norm',
+        y='birch_temp_norm',
+        col='year',
+        col_wrap=col_wrap,
+        height=8,
+        scatter_kws={'s': 20, 'alpha': 0.6},
+        line_kws={'color': 'red'},
+        ci=None,
+        sharex=False,
+        sharey=False
+    )
+    g.set_axis_labels('Understory normalized temp (°C per Green Ratio)', 'Birch normalized temp (°C per Green Ratio)')
+
+    # make x and y the same ratio: set equal limits and square aspect on each facet
+    df_plot = daytime_df[['understory_temp_norm', 'birch_temp_norm']].dropna()
+    if not df_plot.empty:
+        vmin = float(df_plot.min().min())
+        vmax = float(df_plot.max().max())
+        padding = (vmax - vmin) * 0.05 if vmax > vmin else 0.5
+        vmin -= padding
+        vmax += padding
+        for ax in g.axes.flatten():
+            ax.set_xlim(vmin, vmax)
+            ax.set_ylim(vmin, vmax)
+            ax.set_aspect('equal', adjustable='box')
+            # add 1:1 reference line
+            ax.plot([vmin, vmax], [vmin, vmax], color='gray', linestyle='--', linewidth=1.0, zorder=5)
+
+    plt.tight_layout()
 
 #%% Visualization - Overall green ratio distribution by year
 fig, ax = plt.subplots(figsize=(8, 6))
