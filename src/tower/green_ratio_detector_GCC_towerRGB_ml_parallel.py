@@ -1,9 +1,9 @@
 '''
-Enhanced Green Ratio Detector for Vegetation Analysis with Machine Learning Classification
+Enhanced Green Ratio Detector for Vegetation Analysis with Machine Learning Classification (Parallel Version)
 
 This script processes a collection of time-lapse images to quantify vegetation coverage and 
 separate different vegetation types (likely trees and understory plants) using advanced 
-machine learning techniques.
+machine learning techniques with parallel processing for improved performance.
 
 The script:
 1. Recursively searches for images in the specified directory
@@ -25,6 +25,8 @@ Dependencies:
 - scikit-learn: For machine learning algorithms
 - tqdm: For progress tracking
 - PIL: For extracting image metadata
+- concurrent.futures: For parallel processing
+- pandas: For DataFrame operations
 
 Usage:
 - Set 'imfolder' to the directory containing images
@@ -48,8 +50,16 @@ import glob
 import tqdm
 import seaborn as sns
 import datetime
+import pandas as pd
 from PIL import Image
 from PIL.ExifTags import TAGS
+import concurrent.futures
+from functools import partial
+import multiprocessing
+
+# Set matplotlib to non-interactive backend for parallel processing
+import matplotlib
+matplotlib.use('Agg')
 
 # Machine learning imports
 from sklearn.mixture import GaussianMixture
@@ -74,19 +84,18 @@ imfiles.extend(glob.glob(os.path.join(imfolder, '**/', '*.png'), recursive=True)
 imfiles.extend(glob.glob(os.path.join(imfolder, '**/', '*.PNG'), recursive=True))
 print(f"Found {len(imfiles)} images in {imfolder}")
 
-imoutfolder = '/mnt/i/SCIENCE-IGN-ALL/AVOCA_Group/2_Shared_folders/5_Projects/2025Abisko/Tower RGB images/Data_greenessByShunanOct_' + classification_method + '_mean'
+imoutfolder = '/mnt/i/SCIENCE-IGN-ALL/AVOCA_Group/2_Shared_folders/5_Projects/2025Abisko/Tower RGB images/Data_greenessByShunan_' + classification_method + '_mean'
 if not os.path.exists(imoutfolder):
     os.makedirs(imoutfolder)
+
 #%%
 # Create the main results directory if it doesn't exist
 results_dir = os.path.join(imoutfolder, 'results')
 if not os.path.exists(results_dir):
     os.makedirs(results_dir)
 
-# Initialize the CSV file with headers
 csv_path = os.path.join(results_dir, 'green_ratio_' + classification_method + '.csv')
-with open(csv_path, 'w') as f:
-    f.write('filename,datetime,green_ratio,green_mean,green_std,green_norm,class1_ratio,class1_mean,class1_std,class1_norm,class2_ratio,class2_mean,class2_std,class2_norm,method\n')
+
 #%%
 def get_image_datetime(image_path):
     """
@@ -128,9 +137,8 @@ def get_image_datetime(image_path):
                     
             return None
     except Exception as e:
-        print(f"Error extracting metadata from {image_path}: {e}")
         return None
-    
+
 #%%    
 def quantify_vegetation_kmeans(img):
     """
@@ -163,7 +171,7 @@ def quantify_vegetation_kmeans(img):
         greenness = g / (r + g + b + 1e-10)
 
         # Create a binary mask using a threshold (adjust as needed)
-        threshold = 0.37 # 0.38 +- 0.01
+        threshold = 0.37 # 0.37 +- 0.0316
         green_mask = (greenness > threshold).astype(np.uint8) * 255
         
         # Count green pixels and calculate ratio
@@ -280,27 +288,10 @@ def quantify_vegetation_kmeans(img):
         return green_metrics, green_mask, class1_metrics, class2_metrics, visualization
 
     except Exception as e:
-        print(f"An error occurred: {e}")
         return None, None, None, None, None
 
 def quantify_vegetation_gmm(img):
-    """
-    Quantifies vegetation using Gaussian Mixture Models (GMM).
-    
-    GMMs can capture more complex cluster shapes than K-means and provide
-    probability estimates for class membership. This implementation uses
-    HSV color space for better vegetation segmentation.
-    
-    Args:
-        img: The input image (BGR format)
-        
-    Returns:
-        tuple: Overall green metrics (ratio, mean, std, norm_greenness),
-               green mask, 
-               class1 metrics (ratio, mean, std, norm_greenness), 
-               class2 metrics (ratio, mean, std, norm_greenness), 
-               class visualization
-    """
+    """Quantifies vegetation using Gaussian Mixture Models (GMM)."""
     try:
         # First identify green pixels using GCC as before
         b, g, r = cv2.split(img)
@@ -309,7 +300,7 @@ def quantify_vegetation_gmm(img):
         r = r.astype(float)
         
         greenness = g / (r + g + b + 1e-10)
-        threshold = 0.38 # 0.38 +- 0.01
+        threshold = 0.37 # 0.37 +- 0.0316
         green_mask = (greenness > threshold).astype(np.uint8) * 255
         
         green_pixels = np.sum(green_mask > 0)
@@ -419,9 +410,8 @@ def quantify_vegetation_gmm(img):
         return green_metrics, green_mask, class1_metrics, class2_metrics, visualization
         
     except Exception as e:
-        print(f"An error occurred in GMM clustering: {e}")
         return None, None, None, None, None
-    
+
 def quantify_vegetation_dbscan(img):
     """
     Quantifies vegetation using DBSCAN clustering.
@@ -520,7 +510,7 @@ def quantify_vegetation_dbscan(img):
                 
                 # Map back to original coordinates
                 y1, x1 = y_coords[class1_indices], x_coords[class1_indices]
-                y2, x2 = y_coords[class2_indices]
+                y2, x2 = y_coords[class2_indices], x_coords[class2_indices]
                 
                 # Create masks
                 class1_mask = np.zeros(img.shape[:2], dtype=bool)
@@ -758,117 +748,260 @@ def quantify_vegetation(img, method="kmeans"):
                class visualization
     """
     if method == "kmeans":
-        print("Using K-means clustering")
         return quantify_vegetation_kmeans(img)
     elif method == "gmm":
-        print("Using Gaussian Mixture Models")
         return quantify_vegetation_gmm(img)
     elif method == "dbscan":
-        print("Using DBSCAN clustering")
         return quantify_vegetation_dbscan(img)
     elif method == "spectral":
-        print("Using Spectral clustering")
         return quantify_vegetation_spectral(img)
     else:
-        print(f"Unknown method '{method}', using kmeans instead")
         return quantify_vegetation_kmeans(img)
 
-#%%
-# Process each image and write results immediately to CSV
-for i in tqdm.tqdm(imfiles, desc="Processing images"):
-    img = cv2.imread(i)
-    if img is None:
-        print(f"Could not read image: {i}")
-        continue
-        
-    print("processing: ", i)
-
-    # Get image datetime from EXIF metadata
-    image_datetime = get_image_datetime(i)
-    datetime_str = image_datetime if image_datetime else "NA"
-    print(f"Image datetime: {datetime_str}")
+def process_single_image(image_path, input_folder, output_folder, method):
+    """
+    Process a single image and return results.
     
-    # Quantify vegetation within the whole image using the selected method
-    green_metrics, green_mask, class1_metrics, class2_metrics, class_vis = quantify_vegetation(img, method=classification_method)
-
-    if green_metrics is not None:
-        print(f"The green pixel ratio is: {green_metrics['ratio']:.4f}")
-        print(f"Green mean: {green_metrics['mean']:.4f}, std: {green_metrics['std']:.4f}, normalized: {green_metrics['norm_greenness']:.4f}")
-        print(f"Class 1 ratio: {class1_metrics['ratio']:.4f}, mean: {class1_metrics['mean']:.4f}, std: {class1_metrics['std']:.4f}")
-        print(f"Class 2 ratio: {class2_metrics['ratio']:.4f}, mean: {class2_metrics['mean']:.4f}, std: {class2_metrics['std']:.4f}")
+    Args:
+        image_path: Path to the image file
+        input_folder: Root input directory
+        output_folder: Root output directory
+        method: Classification method to use
         
-        # Write result to CSV immediately
-        with open(csv_path, 'a') as f:
-            f.write(f'{i},{datetime_str},'
-                    f'{green_metrics["ratio"]},{green_metrics["mean"]},{green_metrics["std"]},{green_metrics["norm_greenness"]},'
-                    f'{class1_metrics["ratio"]},{class1_metrics["mean"]},{class1_metrics["std"]},{class1_metrics["norm_greenness"]},'
-                    f'{class2_metrics["ratio"]},{class2_metrics["mean"]},{class2_metrics["std"]},{class2_metrics["norm_greenness"]},'
-                    f'{classification_method}\n')
+    Returns:
+        dict: Dictionary containing processing results and status
+    """
+    try:
+        img = cv2.imread(image_path)
+        if img is None:
+            return {
+                'filename': image_path,
+                'datetime': None,
+                'green_ratio': None,
+                'green_mean': None,
+                'green_std': None,
+                'green_norm': None,
+                'class1_ratio': None,
+                'class1_mean': None,
+                'class1_std': None,
+                'class1_norm': None,
+                'class2_ratio': None,
+                'class2_mean': None,
+                'class2_std': None,
+                'class2_norm': None,
+                'method': method,
+                'status': 'failed',
+                'error': 'Could not read image'
+            }
 
-        # Apply the green mask to the image
-        masked_img = cv2.bitwise_and(img, img, mask=green_mask // 255)
-
-        # Display the original image, the masked image, and vegetation classes
-        # Convert the images to RGB format for matplotlib
-        img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        masked_img_rgb = cv2.cvtColor(masked_img, cv2.COLOR_BGR2RGB)
-        class_vis_rgb = cv2.cvtColor(class_vis, cv2.COLOR_BGR2RGB)
-
-        # Create a figure and axes
-        fig, axes = plt.subplots(1, 3, figsize=(15, 5))
-
-        # Display the original image
-        axes[0].imshow(img_rgb)
-        title_text = f"Original ({datetime_str})" if datetime_str != "NA" else "Original"
-        axes[0].set_title(title_text)
-        axes[0].axis('off')  # Hide the axes
-
-        # Display the masked image
-        axes[1].imshow(masked_img_rgb)
-        axes[1].set_title(f"Green Masked (GR={green_metrics['ratio']:.2f}, Norm={green_metrics['norm_greenness']:.2f})")
-        axes[1].axis('off')  # Hide the axes
+        # Get image datetime from EXIF metadata
+        image_datetime = get_image_datetime(image_path)
+        datetime_str = image_datetime if image_datetime else "NA"
         
-        # Display the vegetation classes
-        axes[2].imshow(class_vis_rgb)
-        axes[2].set_title(f"Vegetation Classes ({classification_method})\n"
-                  f"class1={class1_metrics['ratio']:.2f} (Norm={class1_metrics['norm_greenness']:.2f})\n"
-                  f"class2={class2_metrics['ratio']:.2f} (Norm={class2_metrics['norm_greenness']:.2f})")
-        axes[2].axis('off')
-        
-        # Create custom legend elements
-        legend_elements = [
-            Patch(facecolor='blue', edgecolor='black', label='Class 1'),
-            Patch(facecolor='green', edgecolor='black', label='Class 2')
-        ]
-        
-        # Add legend to the bottom of the third subplot
-        axes[2].legend(handles=legend_elements, loc='lower center', 
-                  bbox_to_anchor=(0.5, -0.3), frameon=True, 
-                  facecolor='white', edgecolor='black')
+        # Quantify vegetation using the selected method
+        green_metrics, green_mask, class1_metrics, class2_metrics, class_vis = quantify_vegetation(img, method=method)
 
-        plt.tight_layout()  # Adjust layout to prevent overlapping titles
+        if green_metrics is not None:
+            # Apply the green mask to the image
+            masked_img = cv2.bitwise_and(img, img, mask=green_mask // 255)
 
-        # Create output directory structure that mirrors input
-        rel_path = os.path.relpath(os.path.dirname(i), imfolder)
-        output_dir = os.path.join(imoutfolder, rel_path)
-        
-        # Create the directory if it doesn't exist
-        if not os.path.exists(output_dir):
-            os.makedirs(output_dir)
+            # Convert images to RGB format for matplotlib
+            img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+            masked_img_rgb = cv2.cvtColor(masked_img, cv2.COLOR_BGR2RGB)
+            class_vis_rgb = cv2.cvtColor(class_vis, cv2.COLOR_BGR2RGB)
+
+            # Create a figure and axes
+            fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+
+            # Display the original image
+            axes[0].imshow(img_rgb)
+            title_text = f"Original ({datetime_str})" if datetime_str != "NA" else "Original"
+            axes[0].set_title(title_text)
+            axes[0].axis('off')
+
+            # Display the masked image
+            axes[1].imshow(masked_img_rgb)
+            axes[1].set_title(f"Green Masked (GR={green_metrics['ratio']:.2f}, Norm={green_metrics['norm_greenness']:.2f})")
+            axes[1].axis('off')
             
-        # Extract base filename and extension
-        base_filename = datetime_str + "_" + os.path.splitext(os.path.basename(i))[0]
-        extension = os.path.splitext(os.path.basename(i))[1]
+            # Display the vegetation classes
+            axes[2].imshow(class_vis_rgb)
+            axes[2].set_title(f"Vegetation Classes ({method})\n"
+                      f"class1={class1_metrics['ratio']:.2f} (Norm={class1_metrics['norm_greenness']:.2f})\n"
+                      f"class2={class2_metrics['ratio']:.2f} (Norm={class2_metrics['norm_greenness']:.2f})")
+            axes[2].axis('off')
+            
+            # Create custom legend elements
+            legend_elements = [
+                Patch(facecolor='blue', edgecolor='black', label='Class 1'),
+                Patch(facecolor='green', edgecolor='black', label='Class 2')
+            ]
+            
+            # Add legend to the bottom of the third subplot
+            axes[2].legend(handles=legend_elements, loc='lower center', 
+                      bbox_to_anchor=(0.5, -0.3), frameon=True, 
+                      facecolor='white', edgecolor='black')
+
+            plt.tight_layout()
+
+            # Create output directory structure that mirrors input
+            rel_path = os.path.relpath(os.path.dirname(image_path), input_folder)
+            output_dir = os.path.join(output_folder, rel_path)
+            
+            # Create the directory if it doesn't exist
+            os.makedirs(output_dir, exist_ok=True)
+                
+            # Extract base filename and extension
+            base_filename = datetime_str + "_" + os.path.splitext(os.path.basename(image_path))[0]
+            extension = os.path.splitext(os.path.basename(image_path))[1]
+            
+            # Save the figure to the mirrored directory structure
+            output_path = os.path.join(output_dir, f"{base_filename}_green_masked{extension}")
+            fig.savefig(output_path, dpi=150, bbox_inches='tight')
+            plt.close(fig)  # Close the figure to free memory
+
+            return {
+                'filename': image_path,
+                'datetime': datetime_str,
+                'green_ratio': green_metrics['ratio'],
+                'green_mean': green_metrics['mean'],
+                'green_std': green_metrics['std'],
+                'green_norm': green_metrics['norm_greenness'],
+                'class1_ratio': class1_metrics['ratio'],
+                'class1_mean': class1_metrics['mean'],
+                'class1_std': class1_metrics['std'],
+                'class1_norm': class1_metrics['norm_greenness'],
+                'class2_ratio': class2_metrics['ratio'],
+                'class2_mean': class2_metrics['mean'],
+                'class2_std': class2_metrics['std'],
+                'class2_norm': class2_metrics['norm_greenness'],
+                'method': method,
+                'status': 'success'
+            }
+        else:
+            return {
+                'filename': image_path,
+                'datetime': datetime_str,
+                'green_ratio': None,
+                'green_mean': None,
+                'green_std': None,
+                'green_norm': None,
+                'class1_ratio': None,
+                'class1_mean': None,
+                'class1_std': None,
+                'class1_norm': None,
+                'class2_ratio': None,
+                'class2_mean': None,
+                'class2_std': None,
+                'class2_norm': None,
+                'method': method,
+                'status': 'failed',
+                'error': 'Vegetation quantification failed'
+            }
+
+    except Exception as e:
+        datetime_str = get_image_datetime(image_path) or "NA"
+        return {
+            'filename': image_path,
+            'datetime': datetime_str,
+            'green_ratio': None,
+            'green_mean': None,
+            'green_std': None,
+            'green_norm': None,
+            'class1_ratio': None,
+            'class1_mean': None,
+            'class1_std': None,
+            'class1_norm': None,
+            'class2_ratio': None,
+            'class2_mean': None,
+            'class2_std': None,
+            'class2_norm': None,
+            'method': method,
+            'status': 'failed',
+            'error': str(e)
+        }
+
+def process_images_parallel(image_files, input_folder, output_folder, method, max_workers=None):
+    """
+    Process images in parallel using ProcessPoolExecutor.
+    
+    Args:
+        image_files: List of image file paths
+        input_folder: Root input directory
+        output_folder: Root output directory  
+        method: Classification method to use
+        max_workers: Maximum number of worker processes (default: CPU count - 1)
         
-        # Save the figure to the mirrored directory structure
-        output_path = os.path.join(output_dir, f"{base_filename}_green_masked{extension}")
-        fig.savefig(output_path)
-        plt.close(fig)  # Close the figure to free memory
+    Returns:
+        list: List of dictionaries containing results for each image
+    """
+    if max_workers is None:
+        max_workers = max(1, multiprocessing.cpu_count() - 1)
+    
+    print(f"Using {max_workers} worker processes")
+    
+    # Create a partial function with the fixed parameters
+    process_func = partial(process_single_image, 
+                          input_folder=input_folder,
+                          output_folder=output_folder,
+                          method=method)
+    
+    results = []
+    with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
+        # Submit all tasks
+        future_to_image = {executor.submit(process_func, img_path): img_path 
+                          for img_path in image_files}
+        
+        # Collect results with progress bar
+        for future in tqdm.tqdm(concurrent.futures.as_completed(future_to_image), 
+                               total=len(image_files), desc="Processing images"):
+            try:
+                result = future.result()
+                results.append(result)
+            except Exception as e:
+                image_path = future_to_image[future]
+                print(f"Error processing {image_path}: {e}")
+                results.append({
+                    'filename': image_path,
+                    'datetime': None,
+                    'green_ratio': None,
+                    'green_mean': None,
+                    'green_std': None,
+                    'green_norm': None,
+                    'class1_ratio': None,
+                    'class1_mean': None,
+                    'class1_std': None,
+                    'class1_norm': None,
+                    'class2_ratio': None,
+                    'class2_mean': None,
+                    'class2_std': None,
+                    'class2_norm': None,
+                    'method': method,
+                    'status': 'failed',
+                    'error': str(e)
+                })
+    
+    return results
 
-    else:
-        print(f"Vegetation quantification failed for {i}")
-        # Write failure to CSV
-        with open(csv_path, 'a') as f:
-            f.write(f'{i},{datetime_str},NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,{classification_method}\n')
-
-print(f"Done! Results saved to {csv_path}")
+#%% Main processing with parallel execution
+if __name__ == "__main__":
+    # Process images in parallel
+    print(f"Starting parallel processing with method: {classification_method}")
+    results = process_images_parallel(imfiles, imfolder, imoutfolder, classification_method, max_workers=None)
+    
+    # Convert results to DataFrame
+    df = pd.DataFrame(results)
+    
+    # Save to CSV
+    df.to_csv(csv_path, index=False)
+    
+    # Print processing summary
+    success_count = sum(1 for r in results if r['status'] == 'success')
+    fail_count = sum(1 for r in results if r['status'] == 'failed')
+    
+    print(f"\nProcessing complete!")
+    print(f"Total images: {len(imfiles)}")
+    print(f"Successful: {success_count}")
+    print(f"Failed: {fail_count}")
+    print(f"Results saved to: {csv_path}")
+    print(f"Images saved to: {imoutfolder}")

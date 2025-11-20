@@ -85,18 +85,23 @@ line3 = sns.lineplot(
     data=df[df["year"] == 2013],
     x="date",
     y="GCC_predicted",
-    label="_nolegend_",  # This prevents it from appearing in the legend
+    label="_nolegend_",
     dashes=(2, 2),
     color=sns.palettes.color_palette()[1],
     ax=ax1
 )
+
+# Use a distinct color palette for months to make dots easily separatable
 scatter = sns.scatterplot(
     data=df,
     x="date",
     y="GCC",
     hue="month",
-    palette="Paired",
-    ax=ax1
+    palette=sns.color_palette("tab20", 12),  # Use tab20 for 12 distinct colors
+    ax=ax1,
+    edgecolor="black",  # Add black edge for better separation
+    linewidth=0.5,
+    s=60  # Slightly larger dots for visibility
 )
 ax1.set(
     xlim=pd.to_datetime(["2013-01-01", "2024-12-31"]),
@@ -114,7 +119,6 @@ ax1.text(pd.to_datetime("2013-12-01"), 0.475, "<---", ha='right', color=sns.pale
 
 # Set gridline spacing to each year
 ax1.xaxis.set_major_locator(plt.matplotlib.dates.YearLocator())
-# ax1.xaxis.set_major_formatter(plt.matplotlib.dates.DateFormatter('%Y'))
 
 # Remove default legends
 ax1.get_legend().remove()
@@ -151,14 +155,12 @@ sns.scatterplot(
 ax2.set(
     xlabel="Date",
     ylabel="Relative Deviation (RD)",
-    # title="Summer Deviation Norm",
 )
 ax2.set(
     xlim=pd.to_datetime(["2013-01-01", "2024-12-31"]),
     ylim=(-0.3, 0.3)
 )
 ax2.xaxis.set_major_locator(plt.matplotlib.dates.YearLocator())
-# ax2.xaxis.set_major_formatter(plt.matplotlib.dates.DateFormatter('%Y'))
 
 # Bottom plot - Annual average deviation norm
 sns.barplot(
@@ -183,17 +185,13 @@ ax3.legend(loc="lower center", ncol=2)
 ax3.set(
     xlabel="Year",
     ylabel="Annual Average Summer RD",
-    # title="Annual Average Deviation Norm"
-    # xlim=(2014, 2024),
 )
 # Add subplot annotations
 ax1.annotate('a)', xy=(0.03, 0.1), xycoords='axes fraction')
 ax2.annotate('b)', xy=(0.03, 0.1), xycoords='axes fraction')
 ax3.annotate('c)', xy=(0.03, 0.1), xycoords='axes fraction')
-# plt.tight_layout()
 fig.savefig("../print/CCDCatE1_combined.png", dpi=300, bbox_inches="tight")
 fig.savefig("../print/CCDCatE1_combined.pdf", dpi=300, bbox_inches="tight")
-
 
 
 
