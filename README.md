@@ -6,6 +6,7 @@
 This repository contains the code and data for the paper "Multi-source Remote Sensing of Insect Defoliation Events in Abisko from Point to Regional Scales".
 A web application [defoliation detector](https://ku-avoca.projects.earthengine.app/view/defoliationdetector) is available at [https://ku-avoca.projects.earthengine.app/view/defoliationdetector](https://ku-avoca.projects.earthengine.app/view/defoliationdetector) for inspecting defoliation events in Abisko region. We hope to expand the web application to larger areas in the future.
 
+Note that this repo currently also contains some scripts for a second manuscript following the defoliation paper in 10.1016/j.agrformet.2026.111023, which focuses on the in depth data processing of tower RGB and thermal images, and the interactions between insect abundance, defoliation intensity, surface temperature, and BVOC emissions. The scripts for the second manuscript are organized in the `src/tower/` folder, and are not included in the main analysis of the defoliation paper.
 
 The code is organized into different sections for data processing, analysis, and visualization.
 
@@ -25,7 +26,7 @@ The code for downloading and processing the data is organized into different ste
         - `AVOCA/Supplementary4manuscript_2025_Abisko_Defoliation/CloseupImages/closeup_green_ratio_mean`
         - `AVOCA/Supplementary4manuscript_2025_Abisko_Defoliation/CloseupImages/closeup_green_ratio_stdplus`
         - `AVOCA/Supplementary4manuscript_2025_Abisko_Defoliation/CloseupImages/closeup_green_ratio_stdminus`
-- [src/closeup/green_ratio_detector_GCC_towerRGB_simple.py](src/src/closeup/green_ratio_detector_GCC_towerRGB_simple.py): This step applies the greenness ratio threshold to the time-lapse images. It converts the images to GCC values and applies the optimal threshold obtained in the previous step to classify the images into healthy (green) and unhealthy/non-vegetation categories. It also filters out images acquired during poor lighting conditions (solar angle altitude < 5 degrees).
+- [src/closeup/green_ratio_detector_GCC_towerRGB_simple.py](src/closeup/green_ratio_detector_GCC_towerRGB_simple.py): This step applies the greenness ratio threshold to the time-lapse images. It converts the images to GCC values and applies the optimal threshold obtained in the previous step to classify the images into healthy (green) and unhealthy/non-vegetation categories. It also filters out images acquired during poor lighting conditions (solar angle altitude < 5 degrees).
     - Processed images and the summary table (csv file) are saved in ERDA repository: 
         - `AVOCA/Supplementary4manuscript_2025_Abisko_Defoliation/TowerRGBimages/Data_greenessByShunan_simple_mean`
         - `AVOCA/Supplementary4manuscript_2025_Abisko_Defoliation/TowerRGBimages/Data_greenessByShunan_simple_stdplus`
@@ -45,13 +46,20 @@ The band designations are as follows (more details in the paper):
 - [src/ccdc/ccdc_defoliation_analysis.py](src/ccdc/ccdc_defoliation_analysis.py): This step analyzes the images exported from GEE. It calculates the annual summer defoliation intensity as described in the paper. 
     - The results are saved as numpy arrays in the ERDA repository: 
         - `AVOCA/Supplementary4manuscript_2025_Abisko_Defoliation/CCDC/data/cs_annual.npy`
-
+- [src/tower/]
 ## Data Analysis 
 The data analysis section includes scripts for analyzing the data and generating figures for the paper. The analysis is organized into different steps:
 - [src/ccdc_analysis_poi.py](src/ccdc_analysis_poi.py): This step analyzes the time series of observed and synthetic GCC values from the POI. It calculates the relative deviations and the annual summer defoliation intensity. This script corresponds to Fig.2 in the paper. 
 - [src/insect_analysis.py](src/insect_analysis.py): This step focuses on the insect abundance data and the interactions with other parameters including HLS GCC derived defoliation intensity, time-lapse and close up images derived Greenness Ration, and total BVOC emmissions. This script corresponds to Fig.3 in the paper.
 - [src/defoliation_analysis.py](src/defoliation_analysis.py): This step focuses on the defoliation mapping. It plots the annual summer defoliation intensity from 2013 to 2024. This script corresponds to Fig.5 in the paper.
 - Other figures (Fig.1, Fig.4, and Fig.6) were produced using QGIS or inkscape, and are not included in this repository. There are also some exploratory scripts that are not included in the paper, but are available in the `src` folder.
+
+## In depth data processing of tower RGB and thermal images 
+Time-lapse imagery contain both RGB and thermal images. More in depth data processing of the tower RGB and thermal images are available in the `src/tower/` folder. The scripts in this folder are prepared for a second manuscript following the defoliation paper in 10.1016/j.agrformet.2026.111023.
+- [src/tower/thermal_calibration.py](src/tower/thermal_calibration.py): This step calibrates the thermal images and corrects for the vignetting effect. More detailed description areavailable in the manuscript. It has a faster version using parallel processing as well [src/tower/thermal_calibration_parallel.py](src/tower/thermal_calibration_parallel.py).
+- [thermalRGBcontrolpoints.m](src/tower/thermalRGBcontrolpoints.m): This step identifies the control points for co-registering the thermal and RGB images. The actual co-registration is done in batch mode using [src/tower/thermalRGBregistration_batch.m](src/tower/thermalRGBregistration_batch.m).
+- [src/tower/train_supervised_classifier.py](src/tower/train_supervised_classifier.py): This step will randomly select 100 images from the time series of time-lapse RGB imagery during daylight time. It will allow users to interactively label training samples for understory, birch tree, and non-vegetation classes. Then it splits the labeled data into training and testing sets, trains a supervised classifier (Random Forest) to classify the images into the three classes, and evaluates the performance of the classifier using various metrics. The trained model is saved for future use in classifying the entire time series of RGB images.
+- [src/tower/green_ratio_detector_GCC_towerRGBthermal_rf_parallel.py](src/tower/green_ratio_detector_GCC_towerRGBthermal_rf_parallel.py): This step detects the green ratio in the tower RGB and thermal images using the trained supervised classifier. Surface temperature is therefore extracted from the corresponding masks for understory and birch tree, respectively. 
 
 ## References
 The manuscript is current submitted for peer review. The reference will be updated once the paper is accepted.
