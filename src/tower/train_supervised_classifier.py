@@ -172,8 +172,17 @@ def is_daytime(timestamp, min_elevation=5.0):
         bool: True if the timestamp is during daylight hours
     """
     try:
-        if timestamp is None or pd.isna(timestamp):
+        if timestamp is None:
             return False
+
+        # Handle NaN/NaT (works for plain Python, numpy, and pandas timestamps)
+        try:
+            # NaN/NaT are not equal to themselves
+            if timestamp != timestamp:
+                return False
+        except Exception:
+            # If comparison fails for some types, ignore and proceed
+            pass
         
         # Calculate solar position
         solpos = pvlib.solarposition.get_solarposition(

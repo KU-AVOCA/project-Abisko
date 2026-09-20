@@ -53,7 +53,7 @@ function maskhls(image) {
 
     var mask = cloudMask.and(adjacentCloudMask).and(cloudShadowMask);
 
-    return image.updateMask(mask).divide(10000).copyProperties(image)
+    return image.updateMask(mask).copyProperties(image)
         .set('system:time_start', imgtime);
 }
 
