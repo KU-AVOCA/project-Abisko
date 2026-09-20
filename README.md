@@ -1,7 +1,10 @@
 # Multi-source Remote Sensing of Insect Defoliation Events in Abisko from Point to Regional Scales
 
+[![Paper 1 DOI](https://img.shields.io/badge/Paper1_DOI-10.1016/j.agrformet.2026.111023-blue)](https://doi.org/10.1016/j.agrformet.2026.111023)
+[![Paper 2 DOI](https://img.shields.io/badge/Paper2_DOI-10.1038/s43247--026--04057--y-blue)](https://doi.org/10.1038/s43247-026-04057-y)
+
 [![DOI](https://zenodo.org/badge/DOI/10.17894/ucph.f4e625a2-2986-4bba-b96c-ddcba1127dc8.svg)](https://doi.org/10.17894/ucph.f4e625a2-2986-4bba-b96c-ddcba1127dc8)
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.15574974.svg)](https://doi.org/10.5281/zenodo.15574974)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.18722696.svg)](https://doi.org/10.5281/zenodo.18722696)
 
 This repository contains the code and data for the paper "Multi-source Remote Sensing of Insect Defoliation Events in Abisko from Point to Regional Scales".
 A web application [defoliation detector](https://ku-avoca.projects.earthengine.app/view/defoliationdetector) is available at [https://ku-avoca.projects.earthengine.app/view/defoliationdetector](https://ku-avoca.projects.earthengine.app/view/defoliationdetector) for inspecting defoliation events in Abisko region. We hope to expand the web application to larger areas in the future.
@@ -54,8 +57,17 @@ The data analysis section includes scripts for analyzing the data and generating
 - Other figures (Fig.1, Fig.4, and Fig.6) were produced using QGIS or inkscape, and are not included in this repository. There are also some exploratory scripts that are not included in the paper, but are available in the `src` folder.
 
 ## References
-The manuscript is current submitted for peer review. The reference will be updated once the paper is accepted.
-If you use this code or data in your research, please cite the following paper and data repository:
+
+If you use this code or data in your research, please cite the following papers and data repository:
+
+Harvard style citations:
+```markdown
+Feng, S., Laursen, S.N., Smart, A., Sørensen, K.S., Lund, M., Grillini, F., Rieksta, J., Jiao, Y., Rinnan, R., Westergaard-Nielsen, A., 2026. Multi-source remote sensing of insect defoliation events in Abisko from point to regional scales. Agricultural and Forest Meteorology 378, 111023. https://doi.org/10.1016/j.agrformet.2026.111023
+
+Nyboe Laursen, S., Feng, S., Smart, A., Grillini, F., Rieksta, J., Jiao, Y., Davie-Martin, C.L., Seco, R., Rinnan, R., Westergaard-Nielsen, A., 2026. Reduced BVOC emissions from birch forest understory during coupled insect outbreak and microclimatic forcing. Communications Earth & Environment. https://doi.org/10.1038/s43247-026-04057-y
+
+Feng, S., Laursen, S. N., Smart, A., Sørensen, K. S., Jensen, M. L., Grillini, F., Rieksta, J., Jiao, Y., Rinnan, R., & Westergaard-Nielsen, A. (2025). KU-AVOCA/project-Abisko: Multi-source Remote Sensing of Insect Defoliation Events in Abisko from Point to Regional Scales. Zenodo. https://doi.org/10.5281/zenodo.15574974
+```
 
 Bibtex entries:
 ```bibtex
@@ -75,11 +87,18 @@ Bibtex entries:
     url = {https://doi.org/10.5281/zenodo.15574974},
     doi = {10.5281/zenodo.15574974}
 }
+@article{Nyboe2026,
+   author = {Simon Nyboe Laursen and Shunan Feng and Amy Smart and Federico Grillini and Jolanta Rieksta and Yi Jiao and Cleo Lisa Davie-Martin and Roger Seco and Riikka Rinnan and Andreas Westergaard-Nielsen},
+   doi = {10.1038/s43247-026-04057-y},
+   issn = {2662-4435},
+   journal = {Communications Earth \& Environment},
+   keywords = {Forest ecology,Heat},
+   month = {9},
+   publisher = {Nature Publishing Group},
+   title = {Reduced BVOC emissions from birch forest understory during coupled insect outbreak and microclimatic forcing},
+   url = {https://www.nature.com/articles/s43247-026-04057-y},
+   year = {2026}
+}
+
 ```
 
-Harvard style citations:
-```markdown
-Feng, S., Laursen, S. N., Smart, A., Sørensen, K. S., Jensen, M. L., Grillini, F., Rieksta, J., Jiao, Y., Rinnan, R., & Westergaard-Nielsen, A. (2025). KU-AVOCA/project-Abisko: Multi-source Remote Sensing of Insect Defoliation Events in Abisko from Point to Regional Scales. Zenodo. https://doi.org/10.5281/zenodo.15574974
-
-Feng, S., Laursen, S. N., Smart, A., Sørensen, K. S., Jensen, M. L., Calamita, F., Dømgaard, M. L., Rinnan, R., & Westergaard-Nielsen, A. (2025). Supplementary Data and Material for Multi-source Remote Sensing of Insect Defoliation Events in Abisko from Point to Regional Scales. https://doi.org/10.17894/ucph.f4e625a2-2986-4bba-b96c-ddcba1127dc8
-```
