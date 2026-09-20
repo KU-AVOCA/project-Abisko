@@ -1,5 +1,7 @@
 # Multi-source Remote Sensing of Insect Defoliation Events in Abisko from Point to Regional Scales
-[![Published Paper DOI](https://img.shields.io/badge/DOI-10.1016%2Fj.agrformet.2026.111023-blue)](https://doi.org/10.1016/j.agrformet.2026.111023)
+[![Paper 1 DOI](https://img.shields.io/badge/Paper1_DOI-10.1016/j.agrformet.2026.111023-blue)](https://doi.org/10.1016/j.agrformet.2026.111023)
+[![Paper 2 DOI](https://img.shields.io/badge/Paper2_DOI-10.1038/s43247--026--04057--y-blue)](https://doi.org/10.1038/s43247-026-04057-y)
+
 [![DOI](https://zenodo.org/badge/DOI/10.17894/ucph.f4e625a2-2986-4bba-b96c-ddcba1127dc8.svg)](https://doi.org/10.17894/ucph.f4e625a2-2986-4bba-b96c-ddcba1127dc8)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.18722696.svg)](https://doi.org/10.5281/zenodo.18722696)
 
@@ -116,11 +118,4 @@ Bibtex entries:
    year = {2026}
 }
 
-Harvard style citations:
-```markdown
-Feng, S., Nyboe Laursen, S., Smart, A., Sørensen, K.S., Lund, M., Grillini, F., Rieksta, J., Jiao, Y., Rinnan, R. & Westergaard‑Nielsen, A., 2026. Multi‑source remote sensing of insect defoliation events in Abisko from point to regional scales. Agricultural and Forest Meteorology, 378, 111023. https://doi.org/10.1016/j.agrformet.2026.111023
-  
-Feng, S., Laursen, S. N., Smart, A., Sørensen, K. S., Jensen, M. L., Grillini, F., Rieksta, J., Jiao, Y., Rinnan, R., & Westergaard-Nielsen, A. (2025). KU-AVOCA/project-Abisko: Multi-source Remote Sensing of Insect Defoliation Events in Abisko from Point to Regional Scales. Zenodo. https://doi.org/10.5281/zenodo.15574974
 
-Feng, S., Laursen, S. N., Smart, A., Sørensen, K. S., Jensen, M. L., Calamita, F., Dømgaard, M. L., Rinnan, R., & Westergaard-Nielsen, A. (2025). Supplementary Data and Material for Multi-source Remote Sensing of Insect Defoliation Events in Abisko from Point to Regional Scales. https://doi.org/10.17894/ucph.f4e625a2-2986-4bba-b96c-ddcba1127dc8
-```
